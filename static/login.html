@@ -14,7 +14,7 @@
   <div id="toast-container"></div>
   
   <nav class="navbar">
-    <a class="nav-logo" href="index.html">
+    <a class="nav-logo" href="/">
       <div class="logo-icon">🔗</div> TeleLink
     </a>
   </nav>
@@ -38,7 +38,7 @@
       
       <div style="margin-top:1.5rem; text-align:center; font-size: 0.9rem">
         <span class="text-dim">Don't have an account?</span>
-        <a href="signup.html" style="color:var(--accent-light); font-weight:700">Create Account</a>
+        <a href="/signup" style="color:var(--accent-light); font-weight:700">Create Account</a>
       </div>
     </div>
   </div>
@@ -60,7 +60,7 @@
       try {
         await logIn(email, pw);
         showToast('Login successful! Redirecting...', 'success');
-        setTimeout(() => { window.location.href = 'tool.html'; }, 1000);
+        setTimeout(() => { window.location.href = '/tool'; }, 1000);
       } catch (err) {
         showToast(err.message, 'error');
         btn.disabled = false;
@@ -71,7 +71,7 @@
     // Check if already logged in
     (async () => {
       const session = await getSession();
-      if (session) window.location.href = 'tool.html';
+      if (session) window.location.href = '/tool';
     })();
   </script>
 </body>

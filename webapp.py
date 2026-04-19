@@ -117,26 +117,32 @@ async def admin_complete_order(req: CompleteRequest, x_supabase_token: str = Hea
 # ── Pages ───────────────────────────────────────────────────────────────────────
 
 @app.get("/")
+@app.get("/index.html")
 async def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
 
 @app.get("/login")
+@app.get("/login.html")
 async def login_page():
     return FileResponse(str(STATIC_DIR / "login.html"))
 
 @app.get("/signup")
+@app.get("/signup.html")
 async def signup_page():
     return FileResponse(str(STATIC_DIR / "signup.html"))
 
 @app.get("/verify")
+@app.get("/verify.html")
 async def verify_page():
     return FileResponse(str(STATIC_DIR / "verify.html"))
 
 @app.get("/tool")
+@app.get("/tool.html")
 async def tool_page():
     return FileResponse(str(STATIC_DIR / "tool.html"))
 
 @app.get("/admin")
+@app.get("/admin.html")
 async def admin_page():
     return FileResponse(str(STATIC_DIR / "admin.html"))
 
