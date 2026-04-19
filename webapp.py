@@ -17,8 +17,15 @@ from supabase import create_client, Client as SupabaseClient
 
 from config import Config
 
-# Supabase Setup
+# Supabase Setup (Normal User Client)
 supabase: SupabaseClient = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
+
+# Supabase Setup (Admin Client - Bypasses RLS)
+admin_supabase: SupabaseClient = None
+if Config.SUPABASE_SERVICE_KEY:
+    admin_supabase = create_client(Config.SUPABASE_URL, Config.SUPABASE_SERVICE_KEY)
+else:
+    admin_supabase = supabase # Fallback if key missing
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -55,9 +62,9 @@ async def submit_order(req: RequestSubmit, x_supabase_token: str = Header(None))
         profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
         
         if not profile_res.data:
-            # SELF-HEALING: Create missing profile automatically
-            print(f"🔄 Creating missing profile for {user.email}")
-            insert_res = supabase.table("profiles").insert({
+            # SELF-HEALING: Use ADMIN client to bypass RLS
+            print(f"🔄 Creating missing profile for {user.email} (Bypassing RLS)")
+            insert_res = admin_supabase.table("profiles").insert({
                 "id": user.id,
                 "user_email": user.email,
                 "free_trials_left": 1
@@ -109,8 +116,8 @@ async def get_profile(x_supabase_token: str = Header(None)):
         profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
         
         if not profile_res.data:
-            # SELF-HEALING: Create it on the fly
-            insert_res = supabase.table("profiles").insert({
+            # SELF-HEALING: Use ADMIN client to bypass RLS
+            insert_res = admin_supabase.table("profiles").insert({
                 "id": user.id,
                 "user_email": user.email,
                 "free_trials_left": 1

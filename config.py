@@ -12,8 +12,9 @@ class Config:
     
     # Supabase
     SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "") 
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")         # Anon Key (for users)
+    SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "") # Secret Key (for bypass)
     
-    # Admin Credentials (NEW)
+    # Admin Credentials
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
-    ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "") # Optional secondary check
+    ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
