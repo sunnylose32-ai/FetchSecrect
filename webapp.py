@@ -51,12 +51,22 @@ async def submit_order(req: RequestSubmit, x_supabase_token: str = Header(None))
     user = await get_user_from_token(x_supabase_token)
     
     try:
-        # Check free trials left
+        # 1. Fetch profile
         profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
-        if not profile_res.data:
-            return JSONResponse(status_code=400, content={"ok": False, "detail": "Profile not found in database. Please contact admin or try signing up again."})
         
-        profile = profile_res.data[0]
+        if not profile_res.data:
+            # SELF-HEALING: Create missing profile automatically
+            print(f"🔄 Creating missing profile for {user.email}")
+            insert_res = supabase.table("profiles").insert({
+                "id": user.id,
+                "user_email": user.email,
+                "free_trials_left": 1
+            }).execute()
+            profile = insert_res.data[0]
+        else:
+            profile = profile_res.data[0]
+        
+        # 2. Check limits
         if profile.get("free_trials_left", 0) <= 0:
             return JSONResponse(
                 status_code=402, 
@@ -97,7 +107,18 @@ async def get_profile(x_supabase_token: str = Header(None)):
     try:
         user = await get_user_from_token(x_supabase_token)
         profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
-        profile = profile_res.data[0] if profile_res.data else None
+        
+        if not profile_res.data:
+            # SELF-HEALING: Create it on the fly
+            insert_res = supabase.table("profiles").insert({
+                "id": user.id,
+                "user_email": user.email,
+                "free_trials_left": 1
+            }).execute()
+            profile = insert_res.data[0]
+        else:
+            profile = profile_res.data[0]
+            
         return {"ok": True, "profile": profile}
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
