@@ -7,14 +7,38 @@
   <link rel="stylesheet" href="static/style.css"/>
   <style>
     .dashboard-grid { display: grid; grid-template-columns: 1fr 300px; gap: 2rem; margin-top: 2rem; }
-    .payment-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 1000; display: none; align-items: center; justify-content: center; }
-    .payment-card { max-width: 500px; width: 90%; background: var(--bg2); padding: 2rem; border-radius: 20px; border: 1px solid var(--border-strong); box-shadow: 0 0 50px rgba(139,92,246,0.2); max-height: 90vh; overflow-y: auto; }
-    .pay-method { display: flex; flex-direction: column; padding: 1rem; background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.75rem; transition: 0.2s; }
-    .pay-method:hover { border-color: var(--accent); background: var(--accent-dim); }
-    .pay-method-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
-    .copy-box { display: flex; gap: 5px; background: var(--bg); padding: 5px; border-radius: 8px; border: 1px solid var(--border-strong); }
-    .copy-box input { flex: 1; background: transparent; border: none; color: var(--text); padding: 4px; pointer-events: none; font-family: monospace; }
-    .copy-btn { background: var(--accent); color: white; border: none; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+    
+    /* Modern Gateway Styles */
+    .payment-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(15px); z-index: 1000; display: none; align-items: center; justify-content: center; }
+    .payment-card { max-width: 450px; width: 90%; background: var(--bg2); border-radius: 24px; border: 1px solid var(--border-strong); box-shadow: 0 0 80px rgba(139,92,246,0.15); overflow: hidden; position: relative; }
+    
+    .gw-header { background: rgba(139, 92, 246, 0.1); padding: 1.5rem; text-align: center; border-bottom: 1px solid var(--border); }
+    .gw-body { padding: 2rem; }
+    
+    .gw-step { display: none; animation: fadeIn 0.3s ease; }
+    .gw-step.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .pay-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem 1rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+    .pay-card:hover { border-color: var(--accent); background: var(--accent-dim); transform: translateY(-3px); }
+    .pay-card-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .pay-card-title { font-weight: 700; font-size: 0.9rem; }
+
+    .copy-box { display: flex; align-items: center; background: var(--bg); padding: 8px; border-radius: 12px; border: 1px solid var(--border-strong); margin-top: 1rem; }
+    .copy-box input { flex: 1; background: transparent; border: none; color: var(--accent-light); font-weight: bold; padding: 4px 8px; pointer-events: none; }
+    .copy-btn { background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    .copy-btn:active { transform: scale(0.95); }
+
+    .spinner { width: 40px; height: 40px; border: 4px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1.5rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .success-icon { font-size: 4rem; color: var(--success); text-align: center; margin-bottom: 1rem; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    @keyframes popIn { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+    
+    .pulse-btn { animation: pulse 2s infinite; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(139, 92, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); } }
+
     @media (max-width: 800px) { .dashboard-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -22,67 +46,79 @@
   <div class="bg-orbs"></div>
   <div id="toast-container"></div>
 
-  <!-- Payment Modal -->
-  <div id="payment-modal" class="payment-modal">
+  <!-- Modern Payment Gateway Modal -->
+  <div id="gateway-modal" class="payment-modal">
     <div class="payment-card">
-      <h2 class="mb-2">Add Credits / Pay</h2>
       
-      <!-- Dynamic Price Text -->
-      <div id="dynamic-price-box" style="background: var(--accent-dim); padding: 1rem; border-radius: 8px; border: 1px solid var(--accent); margin-bottom: 1.5rem; text-align: center; display: none;">
-        <span id="dynamic-price" style="font-weight: 800; color: var(--accent-light);"></span>
-      </div>
-
-      <p class="text-muted mb-2 text-sm">Please send the exact amount to one of the addresses below, then submit your Transaction ID to the admin.</p>
-      
-      <!-- Dynamic Pay Methods -->
-      <div id="pm-binance" class="pay-method" style="display:none">
-        <div class="pay-method-header">
-          <div><strong>Binance Pay (ID)</strong></div> <span style="font-size:1.5rem">🪙</span>
+      <!-- Screen 1: Select Method -->
+      <div id="gw-step-1" class="gw-step active">
+        <div class="gw-header">
+          <h2 style="font-size: 1.2rem; color: var(--text-muted); margin-bottom: 5px;">Select Payment Method</h2>
+          <div id="gw-dynamic-price" style="font-size: 1.8rem; font-weight: 900; color: var(--accent-light);">--</div>
         </div>
-        <div class="copy-box">
-          <input type="text" id="val-binance" value="" />
-          <button class="copy-btn" onclick="copyVal('val-binance')">Copy</button>
-        </div>
-      </div>
-
-      <div id="pm-webmoney" class="pay-method" style="display:none">
-        <div class="pay-method-header">
-          <div><strong>Webmoney WMT</strong></div> <span style="font-size:1.5rem">🏦</span>
-        </div>
-        <div class="copy-box">
-          <input type="text" id="val-webmoney" value="" />
-          <button class="copy-btn" onclick="copyVal('val-webmoney')">Copy</button>
+        <div class="gw-body">
+          <div class="pay-grid">
+            <div id="btn-binance" class="pay-card" onclick="startCheckout('Binance Pay', 'val-binance')" style="display:none">
+              <div class="pay-card-icon">🟨</div><div class="pay-card-title">Binance Pay</div>
+            </div>
+            <div id="btn-usdt" class="pay-card" onclick="startCheckout('USDT / TRX', 'val-usdt')" style="display:none">
+              <div class="pay-card-icon">💵</div><div class="pay-card-title">USDT (TRC20)</div>
+            </div>
+            <div id="btn-webmoney" class="pay-card" onclick="startCheckout('Webmoney WMT', 'val-webmoney')" style="display:none">
+              <div class="pay-card-icon">🏦</div><div class="pay-card-title">Webmoney</div>
+            </div>
+            <div id="btn-nagad" class="pay-card" onclick="startCheckout('Nagad', 'val-nagad')" style="display:none">
+              <div class="pay-card-icon">🔥</div><div class="pay-card-title">Nagad</div>
+            </div>
+          </div>
+          <button class="btn btn-ghost w-full mt-2" onclick="closeGateway()">Cancel</button>
         </div>
       </div>
 
-      <div id="pm-usdt" class="pay-method" style="display:none">
-        <div class="pay-method-header">
-          <div><strong>USDT / TRX (TRC20)</strong></div> <span style="font-size:1.5rem">🌐</span>
-        </div>
-        <div class="copy-box">
-          <input type="text" id="val-usdt" value="" />
-          <button class="copy-btn" onclick="copyVal('val-usdt')">Copy</button>
+      <!-- Screen 2: Active Checkout -->
+      <div id="gw-step-2" class="gw-step">
+        <div class="gw-body text-center">
+          <div class="spinner"></div>
+          <h2 class="mb-1" style="font-size: 1.2rem;">Awaiting Payment</h2>
+          <p class="text-muted text-sm mb-2" style="max-width: 80%; margin: 0 auto;">Send the exact amount to the <strong id="gw-method-name"></strong> address below. The network may take a few minutes to confirm.</p>
+          
+          <div class="copy-box">
+            <input type="text" id="gw-pay-address" value="" readonly/>
+            <button class="copy-btn" onclick="copyVal('gw-pay-address')">Copy</button>
+          </div>
+
+          <div style="margin-top: 2rem; display: flex; flex-direction: column; gap: 10px;">
+            <button class="btn btn-primary w-full" onclick="completeCheckout()">I Have Paid →</button>
+            <button class="btn btn-ghost w-full" onclick="cancelCheckout()">Back to Methods</button>
+          </div>
         </div>
       </div>
 
-      <div id="pm-nagad" class="pay-method" style="display:none">
-        <div class="pay-method-header">
-          <div><strong>Nagad (Send Money)</strong></div> <span style="font-size:1.5rem">📱</span>
+      <!-- Screen 3: Post-Payment Success -->
+      <div id="gw-step-3" class="gw-step">
+        <div class="gw-body text-center">
+          <div class="success-icon">✅</div>
+          <h2 class="mb-1">Payment Logged</h2>
+          <p class="text-dim text-sm mb-2" style="background: rgba(139,92,246,0.1); padding: 1rem; border-radius: 12px; border: 1px solid var(--accent-dark);">
+            Because this is a manual gateway mode, you must submit your <strong>Transaction ID</strong> or Screenshot to our Admin team to receive your credits.
+          </p>
+
+          <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 10px;">
+            <a href="#" target="_blank" id="gw-contact-btn" class="btn btn-primary pulse-btn w-full">✉️ Submit Transaction ID Now</a>
+            <button class="btn btn-outline w-full" onclick="closeGateway()">Done</button>
+          </div>
         </div>
-        <div class="copy-box">
-          <input type="text" id="val-nagad" value="" />
-          <button class="copy-btn" onclick="copyVal('val-nagad')">Copy</button>
-        </div>
-      </div>
-      
-      <div style="background: var(--bg); padding: 1rem; border-radius: 12px; text-align: center; margin-top: 1.5rem;">
-        <p class="text-dim mb-1" style="font-size:0.85rem">Done paying? Notify the admin to receive your credits instantly:</p>
-        <a href="https://t.me/" target="_blank" id="contact-admin-btn" class="btn btn-primary w-full">✉️ Submit Transaction ID / Proof</a>
       </div>
 
-      <button class="btn btn-ghost w-full mt-1" onclick="closePayment()">Cancel</button>
     </div>
   </div>
+
+  <!-- Hidden inputs to store wallet variables from settings -->
+  <input type="hidden" id="val-binance" value="" />
+  <input type="hidden" id="val-webmoney" value="" />
+  <input type="hidden" id="val-usdt" value="" />
+  <input type="hidden" id="val-nagad" value="" />
+
 
   <nav class="navbar">
     <a class="nav-logo" href="/">
@@ -146,7 +182,7 @@
             <span class="text-dim">Verfied:</span>
             <span style="color:var(--success)">✅</span>
           </div>
-          <button class="btn btn-outline w-full mt-2" onclick="openPayment()">Add Balance</button>
+          <button class="btn btn-outline w-full mt-2" onclick="openGateway()">Add Balance</button>
         </div>
 
         <div class="admin-card mt-2">
@@ -166,7 +202,7 @@
     const form = document.getElementById('request-form');
     const historyBody = document.getElementById('history-body');
 
-    // Utility: Copy text to clipboard
+    /* ── Utilities ── */
     function copyVal(inputId) {
       const el = document.getElementById(inputId);
       navigator.clipboard.writeText(el.value).then(() => {
@@ -174,6 +210,40 @@
       });
     }
 
+    /* ── Gateway Logic ── */
+    function openGateway() {
+      document.getElementById('gateway-modal').style.display = 'flex';
+      setGwStep(1);
+    }
+    
+    function closeGateway() {
+      document.getElementById('gateway-modal').style.display = 'none';
+    }
+
+    function setGwStep(step) {
+      document.querySelectorAll('.gw-step').forEach(el => el.classList.remove('active'));
+      document.getElementById(`gw-step-${step}`).classList.add('active');
+    }
+
+    function startCheckout(methodName, sourceInputId) {
+      const address = document.getElementById(sourceInputId).value;
+      if (!address) return showToast('Error: Admin has not configured this wallet.', 'error');
+      
+      document.getElementById('gw-method-name').textContent = methodName;
+      document.getElementById('gw-pay-address').value = address;
+      
+      setGwStep(2); // Move to checkout screen
+    }
+
+    function cancelCheckout() {
+      setGwStep(1); // Go back to method selection
+    }
+
+    function completeCheckout() {
+      setGwStep(3); // Move to success/contact screen
+    }
+
+    /* ── Core Site Logic ── */
     async function loadPublicSettings() {
       try {
         const res = await fetch('/api/public/settings');
@@ -183,20 +253,19 @@
           
           // Inject Contact Links
           const contactLink = st.contact_link || 'https://t.me/';
-          document.getElementById('contact-admin-btn').href = contactLink;
           document.getElementById('sidebar-contact-btn').href = contactLink;
+          document.getElementById('gw-contact-btn').href = contactLink;
 
-          // Inject Pricing
+          // Inject Pricing into Gateway header
           if (st.price_info) {
-            document.getElementById('dynamic-price-box').style.display = 'block';
-            document.getElementById('dynamic-price').textContent = st.price_info;
+            document.getElementById('gw-dynamic-price').textContent = st.price_info;
           }
 
-          // Inject Wallets
-          if (st.pay_binance) { document.getElementById('pm-binance').style.display = 'flex'; document.getElementById('val-binance').value = st.pay_binance; }
-          if (st.pay_webmoney) { document.getElementById('pm-webmoney').style.display = 'flex'; document.getElementById('val-webmoney').value = st.pay_webmoney; }
-          if (st.pay_usdt) { document.getElementById('pm-usdt').style.display = 'flex'; document.getElementById('val-usdt').value = st.pay_usdt; }
-          if (st.pay_nagad) { document.getElementById('pm-nagad').style.display = 'flex'; document.getElementById('val-nagad').value = st.pay_nagad; }
+          // Inject Wallets into hidden inputs and display specific buttons in the grid
+          if (st.pay_binance) { document.getElementById('btn-binance').style.display = 'block'; document.getElementById('val-binance').value = st.pay_binance; }
+          if (st.pay_webmoney) { document.getElementById('btn-webmoney').style.display = 'block'; document.getElementById('val-webmoney').value = st.pay_webmoney; }
+          if (st.pay_usdt) { document.getElementById('btn-usdt').style.display = 'block'; document.getElementById('val-usdt').value = st.pay_usdt; }
+          if (st.pay_nagad) { document.getElementById('btn-nagad').style.display = 'block'; document.getElementById('val-nagad').value = st.pay_nagad; }
         }
       } catch (e) { console.error("Failed to load settings:", e); }
     }
@@ -264,7 +333,7 @@
         });
         const data = await res.json();
         if (res.status === 402) {
-          openPayment();
+          openGateway();
         } else if (data.ok) {
           showToast(data.message, 'success');
           form.reset();
@@ -279,9 +348,6 @@
         btn.textContent = '🚀 Submit Request';
       }
     });
-
-    function openPayment() { document.getElementById('payment-modal').style.display = 'flex'; }
-    function closePayment() { document.getElementById('payment-modal').style.display = 'none'; }
 
     loadPublicSettings();
     loadDashboard();
