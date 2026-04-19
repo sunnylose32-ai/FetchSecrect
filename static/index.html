@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TeleLink — Fetch Private Telegram Content Instantly</title>
+  <meta name="description" content="TeleLink lets you access and download messages, photos, and videos from any private Telegram channel you're a member of — directly from your browser. Secure, fast, and free."/>
+  <meta property="og:title" content="TeleLink — Fetch Private Telegram Content"/>
+  <meta property="og:description" content="Access private Telegram channel messages from your browser. Secure login with your own Telegram account."/>
+  <meta property="og:type" content="website"/>
+  <meta name="twitter:card" content="summary_large_image"/>
+  <link rel="canonical" href="https://yourdomain.com/"/>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    /* ── Hero ──────────────────────────────────────────────────────────── */
+    .hero {
+      padding: 6rem 2rem 5rem;
+      text-align: center;
+      position: relative; z-index: 1;
+    }
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px; border-radius: 100px;
+      background: var(--accent-dim); border: 1px solid var(--border);
+      font-size: 0.82rem; font-weight: 600; color: var(--accent-light);
+      margin-bottom: 2rem; letter-spacing: 0.5px;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 6vw, 4.2rem);
+      font-weight: 900; letter-spacing: -1.5px; line-height: 1.1;
+      margin-bottom: 1.5rem;
+    }
+    .hero-sub {
+      font-size: clamp(1rem, 2vw, 1.2rem);
+      color: var(--text-muted); max-width: 580px; margin: 0 auto 2.5rem;
+      line-height: 1.75;
+    }
+    .hero-actions {
+      display: flex; align-items: center; justify-content: center;
+      gap: 1rem; flex-wrap: wrap;
+    }
+    .hero-visual {
+      margin: 4rem auto 0;
+      max-width: 700px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-visual::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+    .mock-bar {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 1.2rem;
+    }
+    .mock-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .mock-dot-r { background: #ff5f57; }
+    .mock-dot-y { background: #febc2e; }
+    .mock-dot-g { background: #28c840; }
+    .mock-url {
+      flex: 1; background: rgba(255,255,255,0.05); border-radius: 6px;
+      padding: 5px 12px; font-size: 0.8rem; color: var(--text-muted);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .mock-input-row {
+      display: flex; gap: 10px; margin-bottom: 1rem;
+    }
+    .mock-input {
+      flex: 1; background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px 16px; color: var(--text-muted); font-size: 0.9rem;
+      font-family: 'Inter', monospace;
+    }
+    .mock-btn {
+      padding: 14px 22px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      color: #fff; font-weight: 700; font-size: 0.85rem;
+      border: none; cursor: pointer; white-space: nowrap;
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+    .mock-result {
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1rem 1.2rem;
+      text-align: left;
+    }
+    .mock-result-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 0.6rem;
+    }
+    .mock-result-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--blue-dim); display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .mock-result-meta { font-size: 0.78rem; color: var(--text-dim); }
+    .mock-result-text { font-size: 0.9rem; color: var(--text); line-height: 1.6; }
+    .mock-dl-btn {
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+      padding: 7px 14px; border-radius: 7px;
+      background: var(--accent-dim); color: var(--accent-light);
+      font-size: 0.8rem; font-weight: 600; border: 1px solid var(--border);
+    }
+    .typing-cursor {
+      display: inline-block; width: 2px; height: 1em;
+      background: var(--accent-light); vertical-align: text-bottom;
+      animation: blink 1s step-end infinite; margin-left: 1px;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── Features grid ─────────────────────────────────────────────────── */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem; margin-top: 3rem;
+    }
+    .feature-card {
+      padding: 1.75rem; border-radius: var(--radius-lg);
+    }
+    .feature-card .icon {
+      width: 48px; height: 48px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 1.1rem;
+    }
+    .icon-purple  { background: var(--accent-dim); }
+    .icon-blue    { background: var(--blue-dim); }
+    .icon-green   { background: rgba(16,185,129,0.12); }
+    .icon-orange  { background: rgba(245,158,11,0.12); }
+    .feature-card h3 {
+      font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem;
+    }
+    .feature-card p {
+      font-size: 0.88rem; color: var(--text-muted); line-height: 1.65;
+    }
+
+    /* ── How it works ──────────────────────────────────────────────────── */
+    .steps { display: flex; gap: 0; flex-wrap: wrap; margin-top: 3rem; }
+    .step {
+      flex: 1; min-width: 200px; padding: 2rem 1.5rem; text-align: center;
+      position: relative;
+    }
+    .step:not(:last-child)::after {
+      content: '→';
+      position: absolute; right: -10px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim); font-size: 1.5rem;
+    }
+    .step-num {
+      width: 52px; height: 52px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--blue));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; font-weight: 900;
+      margin: 0 auto 1.2rem;
+      box-shadow: 0 6px 20px var(--accent-glow);
+    }
+    .step h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .step p { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; }
+
+    /* ── Stats row ─────────────────────────────────────────────────────── */
+    #stats {
+      padding: 2.5rem 2rem;
+      background: rgba(255,255,255,0.02);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      position: relative; z-index: 1;
+    }
+    .stats-row {
+      max-width: 900px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-around;
+      flex-wrap: wrap; gap: 2rem;
+    }
+    .stat { text-align: center; }
+    .stat-num { font-size: 2rem; font-weight: 900; }
+    .stat-label { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; }
+
+    /* ── CTA section ───────────────────────────────────────────────────── */
+    .cta-section {
+      text-align: center; padding: 5rem 2rem;
+      position: relative; z-index: 1;
+    }
+    .cta-section h2 {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 900; letter-spacing: -0.8px; margin-bottom: 1rem;
+    }
+    .cta-section p {
+      color: var(--text-muted); margin-bottom: 2rem; font-size: 1rem;
+    }
+
+    /* ── Footer ────────────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 1rem;
+      position: relative; z-index: 1;
+    }
+    .footer-logo {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 800; font-size: 1rem; color: var(--text);
+      text-decoration: none;
+    }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a {
+      color: var(--text-dim); font-size: 0.85rem; text-decoration: none;
+      transition: color var(--transition);
+    }
+    .footer-links a:hover { color: var(--text-muted); }
+    footer p { color: var(--text-dim); font-size: 0.82rem; }
+
+    @media (max-width: 640px) {
+      .hero { padding: 4rem 1.2rem 3rem; }
+      .step:not(:last-child)::after { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-orbs"></div>
+  <div id="toast-container"></div>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a class="nav-logo" href="/">
+      <div class="logo-icon">🔗</div>
+      TeleLink
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it Works</a>
+    </div>
+    <div class="nav-actions">
+      <a href="/login" class="btn btn-outline" id="nav-login-btn">Log In</a>
+      <a href="/login" class="btn btn-primary" id="nav-cta-btn">Get Started</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-eyebrow">✨ 100% Free · No account required to learn more</div>
+    <h1>Unlock Private Telegram<br/><span class="gradient-text">Content, Instantly.</span></h1>
+    <p class="hero-sub">
+      TeleLink lets you access messages, photos, and videos from any private Telegram
+      channel you're a member of — directly from your browser. No desktop app needed.
+    </p>
+    <div class="hero-actions">
+      <a href="/login" class="btn btn-primary btn-lg">🚀 Get Started Free</a>
+      <a href="#how-it-works" class="btn btn-outline btn-lg">See How it Works</a>
+    </div>
+
+    <!-- Browser mockup -->
+    <div class="hero-visual">
+      <div class="mock-bar">
+        <div class="mock-dot mock-dot-r"></div>
+        <div class="mock-dot mock-dot-y"></div>
+        <div class="mock-dot mock-dot-g"></div>
+        <div class="mock-url">🔒 telelink.app/tool</div>
+      </div>
+      <div class="mock-input-row">
+        <div class="mock-input" id="mock-typing">https://t.me/c/<span class="typing-cursor"></span></div>
+        <button class="mock-btn">Fetch →</button>
+      </div>
+      <div class="mock-result">
+        <div class="mock-result-header">
+          <div class="mock-result-icon">📄</div>
+          <div>
+            <div style="font-size:0.82rem;font-weight:600">Message #1247 · Private Channel</div>
+            <div class="mock-result-meta">April 16, 2025 · 10:42 AM</div>
+          </div>
+        </div>
+        <div class="mock-result-text">
+          🎉 Exclusive announcement! The new batch of premium resources has been uploaded.
+          Members can now access the full library including the Q4 strategy documents...
+        </div>
+        <div class="mock-dl-btn">📥 Download Attachment · 3.2 MB</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <div id="stats">
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-num gradient-text">100%</div>
+        <div class="stat-label">Free to Use</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num gradient-text">0</div>
+        <div class="stat-label">Data Stored</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num gradient-text">⚡</div>
+        <div class="stat-label">Instant Fetch</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num gradient-text">🔒</div>
+        <div class="stat-label">Your Account Only</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <section class="section" id="features">
+    <div class="section-inner">
+      <div class="section-label">Features</div>
+      <h2 class="section-title">Everything you need to<br/><span class="gradient-text">access your channels</span></h2>
+      <p class="section-subtitle">
+        TeleLink uses your Telegram session to let you access any channel content through a clean, fast web interface.
+      </p>
+      <div class="features-grid">
+        <div class="card feature-card">
+          <div class="icon icon-purple">🔐</div>
+          <h3>Your Own Account</h3>
+          <p>Uses your Telegram login — not a shared bot. Only channels you're already a member of can be accessed. Your privacy is always protected.</p>
+        </div>
+        <div class="card feature-card">
+          <div class="icon icon-blue">⚡</div>
+          <h3>Instant Fetch</h3>
+          <p>Paste a <code style="color:var(--accent-light);font-size:0.85em">t.me/c/...</code> link and get the message content within seconds. No waiting, no delays.</p>
+        </div>
+        <div class="card feature-card">
+          <div class="icon icon-green">📥</div>
+          <h3>Download Media</h3>
+          <p>Photos, videos, audio, documents, stickers — everything is downloadable directly from your browser with one click.</p>
+        </div>
+        <div class="card feature-card">
+          <div class="icon icon-orange">🛡️</div>
+          <h3>Secure by Design</h3>
+          <p>Session tokens never leave the server. No messages are stored. Sessions expire automatically after 12 hours of inactivity.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="section" id="how-it-works" style="background: rgba(255,255,255,0.01);">
+    <div class="section-inner">
+      <div class="section-label">How it Works</div>
+      <h2 class="section-title">Three steps.<br/><span class="gradient-text">That's all.</span></h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Login with Telegram</h3>
+          <p>Enter your phone number. Receive a one-time OTP code from Telegram and verify it. No password stored.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Paste a Link</h3>
+          <p>Copy any <code style="color:var(--accent-light)">t.me/c/...</code> post link from a channel you've joined. Paste it into TeleLink.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Get the Content</h3>
+          <p>Instantly view the full message text, or download any attached media file — photos, videos, documents.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="badge badge-purple" style="margin-bottom:1.5rem">✨ Free — No credit card needed</div>
+    <h2>Ready to get started?</h2>
+    <p>Login with your Telegram account — it takes less than 30 seconds.</p>
+    <a href="/login" class="btn btn-primary btn-lg">🚀 Start Using TeleLink</a>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <a class="footer-logo" href="/">
+      <span style="font-size:1.2em">🔗</span> TeleLink
+    </a>
+    <p>© 2025 TeleLink. All rights reserved.</p>
+    <div class="footer-links">
+      <a href="/login">Login</a>
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it Works</a>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+  <script>
+    // Typing animation in the mock browser
+    const typingEl = document.getElementById('mock-typing');
+    const fullText = 'https://t.me/c/1234567890/4721';
+    let i = 20; // start after the shown text
+    function typeNext() {
+      if (i < fullText.length) {
+        typingEl.innerHTML = fullText.substring(0, i) + '<span class="typing-cursor"></span>';
+        i++;
+        setTimeout(typeNext, 80 + Math.random() * 60);
+      }
+    }
+    setTimeout(typeNext, 1500);
+
+    // Update nav buttons if already logged in
+    (async () => {
+      const token = getSessionToken();
+      if (token) {
+        try {
+          await apiCall('GET', '/api/auth/me', null, token);
+          document.getElementById('nav-login-btn').textContent = 'Open Tool';
+          document.getElementById('nav-login-btn').href = '/tool';
+          document.getElementById('nav-cta-btn').textContent = '→ Go to Tool';
+          document.getElementById('nav-cta-btn').href = '/tool';
+        } catch { clearSession(); }
+      }
+    })();
+  </script>
+</body>
+</html>

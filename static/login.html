@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login — TeleLink</title>
+  <meta name="description" content="Log in to TeleLink with your Telegram account using a one-time OTP code. Secure, private, and instant."/>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    body { display: flex; flex-direction: column; min-height: 100vh; }
+
+    .login-wrap {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      padding: 2rem 1.2rem; position: relative; z-index: 1;
+    }
+    .login-box {
+      width: 100%; max-width: 420px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 2.5rem 2rem;
+      backdrop-filter: blur(20px);
+      position: relative; overflow: hidden;
+    }
+    .login-box::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--blue), var(--accent));
+      background-size: 200%; animation: shimmer 3s linear infinite;
+    }
+    @keyframes shimmer { to { background-position: 200% center; } }
+
+    .login-icon {
+      width: 64px; height: 64px; border-radius: 18px;
+      background: linear-gradient(135deg, var(--accent), var(--blue));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; margin: 0 auto 1.5rem;
+      box-shadow: 0 8px 24px var(--accent-glow);
+    }
+    .login-title { font-size: 1.5rem; font-weight: 800; text-align: center; margin-bottom: 0.4rem; }
+    .login-sub   { font-size: 0.88rem; color: var(--text-muted); text-align: center; margin-bottom: 2rem; line-height: 1.6; }
+
+    /* Step indicators */
+    .steps-indicator {
+      display: flex; align-items: center; gap: 0;
+      margin-bottom: 2rem;
+    }
+    .step-dot {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 700;
+      border: 2px solid var(--border); color: var(--text-dim);
+      transition: all var(--transition); flex-shrink: 0;
+    }
+    .step-dot.active {
+      background: linear-gradient(135deg, var(--accent), var(--blue));
+      border-color: transparent; color: #fff;
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+    .step-dot.done { background: var(--success); border-color: transparent; color: #fff; }
+    .step-line { flex: 1; height: 2px; background: var(--border); transition: background var(--transition); }
+    .step-line.done { background: var(--success); }
+
+    /* Step panels */
+    .step-panel { display: none; animation: fadeUp 0.3s ease; }
+    .step-panel.active { display: block; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Phone input with flag */
+    .phone-input-wrap { display: flex; gap: 0; width: 100%; }
+    .phone-prefix {
+      padding: 0.8rem 1rem; background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border); border-right: none;
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+      color: var(--text-muted); font-size: 0.9rem; white-space: nowrap;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .phone-num {
+      flex: 1; padding: 0.8rem 1rem;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      color: var(--text); font-family: inherit; font-size: 0.95rem;
+      outline: none; transition: all var(--transition);
+    }
+    .phone-num:focus {
+      border-color: var(--accent);
+      background: rgba(124,58,237,0.06);
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
+    }
+
+    /* OTP boxes */
+    .otp-row {
+      display: flex; gap: 8px; justify-content: center;
+      margin: 0.5rem 0;
+    }
+    .otp-box {
+      width: 46px; height: 54px;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius: 10px; text-align: center; font-size: 1.3rem; font-weight: 700;
+      color: var(--text); outline: none; transition: all var(--transition);
+      caret-color: transparent;
+    }
+    .otp-box:focus {
+      border-color: var(--accent); background: rgba(124,58,237,0.08);
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.2);
+    }
+    .otp-box.filled { border-color: var(--accent-light); }
+
+    /* Info box */
+    .info-box {
+      background: var(--blue-dim); border: 1px solid rgba(59,130,246,0.2);
+      border-radius: var(--radius-sm); padding: 0.75rem 1rem;
+      font-size: 0.83rem; color: #93c5fd; line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+
+    /* 2FA panel */
+    #panel-2fa { display: none; }
+
+    .back-link {
+      display: flex; align-items: center; gap: 6px; justify-content: center;
+      margin-top: 1.2rem; color: var(--text-dim); font-size: 0.85rem;
+      cursor: pointer; background: none; border: none;
+      transition: color var(--transition); font-family: inherit;
+    }
+    .back-link:hover { color: var(--text-muted); }
+
+    .resend-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 0.75rem;
+    }
+    #resend-btn {
+      background: none; border: none; color: var(--accent-light);
+      font-size: 0.83rem; cursor: pointer; font-family: inherit;
+      transition: opacity var(--transition);
+    }
+    #resend-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #timer { font-size: 0.83rem; color: var(--text-dim); }
+
+    /* logo link */
+    .logo-link {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; text-decoration: none; color: var(--text);
+      font-weight: 800; font-size: 1rem; margin-top: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-orbs"></div>
+  <div id="toast-container"></div>
+
+  <!-- Minimal Navbar -->
+  <nav class="navbar">
+    <a class="nav-logo" href="/">
+      <div class="logo-icon">🔗</div>
+      TeleLink
+    </a>
+    <div class="nav-actions">
+      <a href="/" class="btn btn-ghost">← Back to Home</a>
+    </div>
+  </nav>
+
+  <div class="login-wrap">
+    <div class="login-box">
+      <div class="login-icon">🔗</div>
+      <h1 class="login-title">Sign in to TeleLink</h1>
+      <p class="login-sub">Use your Telegram account to get started.<br/>No password stored — just a one-time OTP.</p>
+
+      <!-- Step indicators -->
+      <div class="steps-indicator">
+        <div class="step-dot active" id="dot-1">1</div>
+        <div class="step-line" id="line-1"></div>
+        <div class="step-dot" id="dot-2">2</div>
+        <div class="step-line" id="line-2"></div>
+        <div class="step-dot" id="dot-3">✓</div>
+      </div>
+
+      <!-- Panel 1: Phone number -->
+      <div class="step-panel active" id="panel-phone">
+        <div class="info-box">
+          📱 Telegram will send a verification code to your phone or the Telegram app.
+        </div>
+        <div class="input-group" style="margin-bottom:1.2rem">
+          <label class="input-label">Phone Number</label>
+          <div class="phone-input-wrap">
+            <div class="phone-prefix">📞</div>
+            <input
+              type="tel" id="phone-input" class="phone-num"
+              placeholder="+1 234 567 8900" autocomplete="tel"
+            />
+          </div>
+          <span class="text-sm text-muted mt-1">Include country code (e.g. +1, +44, +880)</span>
+        </div>
+        <button class="btn btn-primary w-full" id="send-code-btn" style="height:48px">
+          Send OTP Code →
+        </button>
+      </div>
+
+      <!-- Panel 2: OTP code -->
+      <div class="step-panel" id="panel-otp">
+        <p class="text-muted text-sm" style="margin-bottom:1.2rem;text-align:center">
+          Enter the code sent to <strong id="phone-display" style="color:var(--accent-light)"></strong><br/>
+          via Telegram or SMS
+        </p>
+        <div class="otp-row" id="otp-row">
+          <input type="text" class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]"/>
+          <input type="text" class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]"/>
+          <input type="text" class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]"/>
+          <input type="text" class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]"/>
+          <input type="text" class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]"/>
+        </div>
+        <div class="resend-row">
+          <span id="timer" class="text-sm text-muted">Resend in 60s</span>
+          <button id="resend-btn" disabled>Resend Code</button>
+        </div>
+        <button class="btn btn-primary w-full mt-2" id="verify-btn" style="height:48px" disabled>
+          Verify Code →
+        </button>
+        <button class="back-link" id="back-to-phone">← Change number</button>
+      </div>
+
+      <!-- Panel 2FA (2-factor auth) -->
+      <div class="step-panel" id="panel-2fa">
+        <div class="info-box">🔒 Your account has 2-Step Verification enabled. Enter your cloud password.</div>
+        <div class="input-group" style="margin-bottom:1.2rem">
+          <label class="input-label">2FA Password</label>
+          <input type="password" id="twofa-input" class="input" placeholder="Enter your Telegram password"/>
+        </div>
+        <button class="btn btn-primary w-full" id="twofa-btn" style="height:48px">
+          Confirm Password →
+        </button>
+        <button class="back-link" id="back-to-phone-2fa">← Start over</button>
+      </div>
+
+      <!-- Panel 3: Success (briefly shown then redirect) -->
+      <div class="step-panel" id="panel-success">
+        <div style="text-align:center;padding:1rem 0">
+          <div style="font-size:3rem;margin-bottom:1rem">🎉</div>
+          <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:0.5rem">You're logged in!</h2>
+          <p class="text-muted text-sm">Redirecting to the tool…</p>
+          <div class="flex-center mt-2"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>
+    (async () => {
+      // Redirect to tool if already logged in
+      await redirectIfLoggedIn();
+    })();
+
+    // State
+    let phoneCodeHash = '';
+    let currentPhone  = '';
+    let resendTimer   = null;
+
+    // ── Elements ──────────────────────────────────────────────────────────
+    const phoneInput   = document.getElementById('phone-input');
+    const sendBtn      = document.getElementById('send-code-btn');
+    const verifyBtn    = document.getElementById('verify-btn');
+    const resendBtn    = document.getElementById('resend-btn');
+    const timerEl      = document.getElementById('timer');
+    const phoneDisplay = document.getElementById('phone-display');
+    const otpBoxes     = document.querySelectorAll('.otp-box');
+    const twofaInput   = document.getElementById('twofa-input');
+    const twofaBtn     = document.getElementById('twofa-btn');
+
+    // ── Step helpers ──────────────────────────────────────────────────────
+    function showPanel(id) {
+      document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+      const p = document.getElementById(id);
+      if (p) { p.classList.add('active'); p.style.display = ''; }
+    }
+
+    function setLoading(btn, loading, text) {
+      btn.disabled = loading;
+      btn.innerHTML = loading
+        ? '<div class="spinner"></div> Please wait…'
+        : text;
+    }
+
+    function setStep(n) {
+      ['dot-1','dot-2','dot-3'].forEach((id, i) => {
+        const el = document.getElementById(id);
+        el.classList.remove('active','done');
+        if (i + 1 < n) el.classList.add('done');
+        else if (i + 1 === n) el.classList.add('active');
+      });
+      ['line-1','line-2'].forEach((id, i) => {
+        const el = document.getElementById(id);
+        el.classList.toggle('done', i + 1 < n);
+      });
+    }
+
+    // ── OTP box auto-advance ──────────────────────────────────────────────
+    otpBoxes.forEach((box, idx) => {
+      box.addEventListener('input', () => {
+        box.value = box.value.replace(/\D/g, '').slice(-1);
+        box.classList.toggle('filled', !!box.value);
+        if (box.value && idx < otpBoxes.length - 1) otpBoxes[idx + 1].focus();
+        checkOtpReady();
+      });
+      box.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !box.value && idx > 0) otpBoxes[idx - 1].focus();
+      });
+      box.addEventListener('paste', e => {
+        const paste = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g,'');
+        if (paste.length >= 5) {
+          otpBoxes.forEach((b, i) => {
+            b.value = paste[i] || '';
+            b.classList.toggle('filled', !!b.value);
+          });
+          checkOtpReady();
+          e.preventDefault();
+        }
+      });
+    });
+
+    function getOtpValue() {
+      return Array.from(otpBoxes).map(b => b.value).join('');
+    }
+
+    function checkOtpReady() {
+      verifyBtn.disabled = getOtpValue().length < 5;
+    }
+
+    // ── Resend countdown ──────────────────────────────────────────────────
+    function startResendTimer() {
+      let sec = 60;
+      resendBtn.disabled = true;
+      timerEl.textContent = `Resend in ${sec}s`;
+      if (resendTimer) clearInterval(resendTimer);
+      resendTimer = setInterval(() => {
+        sec--;
+        if (sec <= 0) {
+          clearInterval(resendTimer);
+          resendBtn.disabled = false;
+          timerEl.textContent = '';
+        } else {
+          timerEl.textContent = `Resend in ${sec}s`;
+        }
+      }, 1000);
+    }
+
+    // ── Send OTP ──────────────────────────────────────────────────────────
+    async function doSendCode() {
+      const phone = phoneInput.value.trim();
+      if (!phone) { showToast('Enter a phone number', 'error'); return; }
+      setLoading(sendBtn, true, 'Send OTP Code →');
+      try {
+        const res = await apiCall('POST', '/api/auth/send-code', { phone });
+        phoneCodeHash = res.phone_code_hash;
+        currentPhone  = phone;
+        phoneDisplay.textContent = phone;
+        setStep(2);
+        showPanel('panel-otp');
+        startResendTimer();
+        otpBoxes[0].focus();
+        showToast('Code sent! Check your Telegram app or SMS.', 'success');
+      } catch (e) {
+        showToast(e.message, 'error');
+      } finally {
+        setLoading(sendBtn, false, 'Send OTP Code →');
+      }
+    }
+
+    sendBtn.addEventListener('click', doSendCode);
+    phoneInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSendCode(); });
+
+    // ── Resend ────────────────────────────────────────────────────────────
+    resendBtn.addEventListener('click', async () => {
+      setLoading(resendBtn, true, 'Resend Code');
+      try {
+        const res = await apiCall('POST', '/api/auth/send-code', { phone: currentPhone });
+        phoneCodeHash = res.phone_code_hash;
+        startResendTimer();
+        otpBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+        otpBoxes[0].focus();
+        checkOtpReady();
+        showToast('A new code was sent.', 'success');
+      } catch (e) {
+        showToast(e.message, 'error');
+      } finally {
+        setLoading(resendBtn, false, 'Resend Code');
+      }
+    });
+
+    // ── Verify OTP ────────────────────────────────────────────────────────
+    async function doVerify(password = null) {
+      const code = getOtpValue();
+      if (code.length < 5) { showToast('Enter the full 5-digit code', 'error'); return; }
+      const btn = password !== null ? twofaBtn : verifyBtn;
+      setLoading(btn, true, password !== null ? 'Confirm Password →' : 'Verify Code →');
+      try {
+        const body = { phone: currentPhone, code, phone_code_hash: phoneCodeHash };
+        if (password) body.password = password;
+        const res = await apiCall('POST', '/api/auth/verify-code', body);
+        setSession(res.session_token, res.user);
+        setStep(3);
+        showPanel('panel-success');
+        showToast(`Welcome, ${res.user.name || 'User'}! 🎉`, 'success');
+        setTimeout(() => { window.location.href = '/tool'; }, 1500);
+      } catch (e) {
+        if (e.message === '2FA_REQUIRED') {
+          showPanel('panel-2fa');
+          document.getElementById('panel-2fa').style.display = 'block';
+          document.getElementById('twofa-input').focus();
+        } else {
+          showToast(e.message, 'error');
+        }
+      } finally {
+        setLoading(btn, false, password !== null ? 'Confirm Password →' : 'Verify Code →');
+      }
+    }
+
+    verifyBtn.addEventListener('click', () => doVerify());
+    twofaBtn.addEventListener('click', () => doVerify(twofaInput.value));
+    twofaInput.addEventListener('keydown', e => { if(e.key === 'Enter') doVerify(twofaInput.value); });
+
+    // ── Back buttons ──────────────────────────────────────────────────────
+    document.getElementById('back-to-phone').addEventListener('click', () => {
+      setStep(1); showPanel('panel-phone'); phoneInput.focus();
+    });
+    document.getElementById('back-to-phone-2fa').addEventListener('click', () => {
+      setStep(1); showPanel('panel-phone'); phoneInput.focus();
+    });
+  </script>
+</body>
+</html>
