@@ -10,7 +10,10 @@ class Config:
     BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
     USER_SESSION = os.environ.get("USER_SESSION", "")  # Administrator User Account
     
-    # Supabase (NEW)
+    # Supabase
     SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")  # Public Anon Key
-    ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")   # Email associated with admin dashboard
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "") 
+    
+    # Admin Credentials (NEW)
+    ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+    ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "") # Optional secondary check

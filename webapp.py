@@ -92,10 +92,14 @@ async def get_profile(x_supabase_token: str = Header(None)):
 @app.get("/api/admin/requests")
 async def admin_get_requests(x_supabase_token: str = Header(None)):
     user = await get_user_from_token(x_supabase_token)
-    # Check if admin
-    profile = supabase.table("profiles").select("is_admin").eq("id", user.id).single().execute()
-    if not profile.data or not profile.data["is_admin"]:
-        raise HTTPException(status_code=403, detail="Access denied. Admins only.")
+    # 1. Check if email matches hardcoded ADMIN_EMAIL in .env
+    if Config.ADMIN_EMAIL and user.email == Config.ADMIN_EMAIL:
+        pass # Allow access
+    else:
+        # 2. Otherwise check the DB flag
+        profile = supabase.table("profiles").select("is_admin").eq("id", user.id).single().execute()
+        if not profile.data or not profile.data["is_admin"]:
+            raise HTTPException(status_code=403, detail="Access denied. Admins only.")
     
     res = supabase.table("requests").select("*").order("created_at", desc=True).execute()
     return {"ok": True, "orders": res.data}
@@ -103,9 +107,12 @@ async def admin_get_requests(x_supabase_token: str = Header(None)):
 @app.post("/api/admin/complete")
 async def admin_complete_order(req: CompleteRequest, x_supabase_token: str = Header(None)):
     user = await get_user_from_token(x_supabase_token)
-    profile = supabase.table("profiles").select("is_admin").eq("id", user.id).single().execute()
-    if not profile.data or not profile.data["is_admin"]:
-        raise HTTPException(status_code=403, detail="Access denied.")
+    if Config.ADMIN_EMAIL and user.email == Config.ADMIN_EMAIL:
+        pass
+    else:
+        profile = supabase.table("profiles").select("is_admin").eq("id", user.id).single().execute()
+        if not profile.data or not profile.data["is_admin"]:
+            raise HTTPException(status_code=403, detail="Access denied.")
 
     supabase.table("requests").update({
         "status": req.status,
@@ -145,6 +152,17 @@ async def tool_page():
 @app.get("/admin.html")
 async def admin_page():
     return FileResponse(str(STATIC_DIR / "admin.html"))
+
+# ── Dynamic Config for Frontend ──────────────────────────────────────────────────
+
+@app.get("/static/config.js")
+async def get_frontend_config():
+    """Serves Supabase keys to the frontend dynamically from .env"""
+    content = f"""
+    window.SUPABASE_URL = "{Config.SUPABASE_URL}";
+    window.SUPABASE_KEY = "{Config.SUPABASE_KEY}";
+    """
+    return Response(content=content, media_type="application/javascript")
 
 # ── Static files ─────────────────────────────────────────────────────────────────
 
