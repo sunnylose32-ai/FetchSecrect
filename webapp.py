@@ -44,7 +44,8 @@ class CompleteRequest(BaseModel):
 
 class SettingsUpdate(BaseModel):
     default_trials: int
-    price_info: str
+    price_per_credit: float
+    bdt_rate: float
     pay_binance: str
     pay_webmoney: str
     pay_usdt: str
@@ -58,6 +59,7 @@ class UserUpdate(BaseModel):
 class PaymentSubmit(BaseModel):
     method: str
     trx_id: str
+    requested_credits: int
 
 class PaymentUpdate(BaseModel):
     payment_id: int
@@ -178,7 +180,8 @@ async def submit_payment(req: PaymentSubmit, x_supabase_token: str = Header(None
             "user_email": user.email,
             "method": req.method,
             "trx_id": req.trx_id.strip(),
-            "status": "Pending"
+            "status": "Pending",
+            "requested_credits": req.requested_credits
         }
         admin_supabase.table("transactions").insert(data).execute()
         return {"ok": True, "message": "Transaction submitted for verification."}
@@ -258,7 +261,8 @@ async def admin_update_settings(req: SettingsUpdate, x_admin_secret: str = Heade
         admin_supabase.table("site_settings").upsert({
             "id": 1,
             "default_trials": req.default_trials,
-            "price_info": req.price_info,
+            "price_per_credit": req.price_per_credit,
+            "bdt_rate": req.bdt_rate,
             "pay_binance": req.pay_binance,
             "pay_webmoney": req.pay_webmoney,
             "pay_usdt": req.pay_usdt,

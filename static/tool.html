@@ -47,13 +47,21 @@
   <div id="gateway-modal" class="payment-modal">
     <div class="payment-card">
       
-      <!-- Screen 1: Select Method -->
+      <!-- Screen 1: Select Method & Calculate -->
       <div id="gw-step-1" class="gw-step active">
-        <div class="gw-header">
-          <h2 style="font-size: 1.2rem; color: var(--text-muted); margin-bottom: 5px;">Select Payment Method</h2>
-          <div id="gw-dynamic-price" style="font-size: 1.8rem; font-weight: 900; color: var(--accent-light);">--</div>
+        <div class="gw-header" style="padding-bottom:1rem">
+          <h2 style="font-size: 1.2rem; color: var(--text); margin-bottom: 5px;">Buy Credits</h2>
+          
+          <div style="margin-top:1rem; background:var(--bg); border:1px solid var(--border-strong); border-radius:12px; padding:1rem;">
+            <label class="text-dim text-sm" style="display:block; margin-bottom:5px;">How many credits do you want? (Min 10)</label>
+            <input type="number" id="buy-amount" class="input" value="10" min="10" style="font-size:1.2rem; font-weight:bold; text-align:center" oninput="updateCalculator()"/>
+            <div style="margin-top:0.5rem; font-size:1.4rem; font-weight:900; color:var(--accent-light);">
+              Total: $<span id="calc-usd-total">0.00</span>
+            </div>
+          </div>
         </div>
-        <div class="gw-body">
+        <div class="gw-body" style="padding-top:1rem">
+          <p class="text-dim text-sm mb-1 text-center">Select Payment Method</p>
           <div class="pay-grid">
             <div id="btn-binance" class="pay-card" onclick="startCheckout('Binance Pay', 'val-binance')" style="display:none">
               <div class="pay-card-icon">🟨</div><div class="pay-card-title">Binance Pay</div>
@@ -77,7 +85,12 @@
         <div class="gw-body text-center">
           <div class="spinner"></div>
           <h2 class="mb-1" style="font-size: 1.2rem;">Awaiting Payment</h2>
-          <p class="text-muted text-sm mb-2" style="max-width: 80%; margin: 0 auto;">Send the exact amount to the <strong id="gw-method-name"></strong> address below.</p>
+          <div style="background: rgba(139,92,246,0.1); border: 1px solid var(--accent-dark); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+            <p style="font-size: 0.9rem; margin-bottom: 5px;">Please send EXACTLY:</p>
+            <p id="gw-exact-amount" style="font-size: 1.8rem; font-weight: 900; color: var(--accent-light);">--</p>
+          </div>
+          
+          <p class="text-muted text-sm mb-2" style="max-width: 80%; margin: 0 auto;">Send to the <strong id="gw-method-name"></strong> address below.</p>
           
           <div class="copy-box">
             <input type="text" id="gw-pay-address" value="" readonly/>
@@ -223,7 +236,9 @@
     const historyBody = document.getElementById('history-body');
     const payHistoryBody = document.getElementById('payments-history-body');
 
-    let currentCheckoutMethod = '';
+    let payMethodName = '';
+    let globalPricePerCredit = 0.5;
+    let globalBdtRate = 120;
 
     /* ── Utilities ── */
     function copyVal(inputId) {
@@ -231,10 +246,19 @@
       navigator.clipboard.writeText(el.value).then(() => { showToast('Address Copied!', 'success'); });
     }
 
+    function updateCalculator() {
+      let val = parseInt(document.getElementById('buy-amount').value);
+      if (isNaN(val) || val < 10) val = 10;
+      const totalUsd = (val * globalPricePerCredit).toFixed(2);
+      document.getElementById('calc-usd-total').textContent = totalUsd;
+      return { credits: val, usd: totalUsd };
+    }
+
     /* ── Gateway Logic ── */
     function openGateway() {
       document.getElementById('gateway-modal').style.display = 'flex';
       setGwStep(1);
+      updateCalculator();
     }
     
     function closeGateway() {
@@ -251,9 +275,23 @@
       const address = document.getElementById(sourceInputId).value;
       if (!address) return showToast('Error: Admin has not configured this wallet.', 'error');
       
-      currentCheckoutMethod = methodName;
+      const calcData = updateCalculator();
+      const finalCredits = calcData.credits;
+      const finalUsd = calcData.usd;
+
+      payMethodName = methodName;
       document.getElementById('gw-method-name').textContent = methodName;
       document.getElementById('gw-pay-address').value = address;
+      
+      // Dynamic Amount Label (BDT vs USD)
+      const exactAmountEl = document.getElementById('gw-exact-amount');
+      if (methodName.toLowerCase().includes('nagad')) {
+        const bdtValue = Math.round(finalUsd * globalBdtRate);
+        exactAmountEl.textContent = bdtValue + " BDT";
+      } else {
+        exactAmountEl.textContent = finalUsd + " USD";
+      }
+
       setGwStep(2); 
     }
 
@@ -261,9 +299,9 @@
     function completeCheckout() {
       // Dynamic Labels based on payment method
       const lbl = document.getElementById('dynamic-tx-label');
-      if (currentCheckoutMethod.includes('Binance')) {
+      if (payMethodName.includes('Binance')) {
         lbl.textContent = "Binance Pay ID / Your Binance Name";
-      } else if (currentCheckoutMethod.includes('USDT') || currentCheckoutMethod.includes('TRX')) {
+      } else if (payMethodName.includes('USDT') || payMethodName.includes('TRX')) {
         lbl.textContent = "TXID / Network Hash";
       } else {
         lbl.textContent = "Transaction ID / Sender Name / Email";
@@ -275,6 +313,8 @@
       const trxId = document.getElementById('gw-trx-id').value;
       if (!trxId) return showToast('Please enter the required information.', 'error');
 
+      const calcData = updateCalculator();
+
       const btn = document.getElementById('gw-submit-tx-btn');
       btn.disabled = true;
       btn.textContent = 'Submitting...';
@@ -284,7 +324,7 @@
         const res = await fetch('/api/payments/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-supabase-token': session.access_token },
-          body: JSON.stringify({ method: currentCheckoutMethod, trx_id: trxId })
+          body: JSON.stringify({ method: payMethodName, trx_id: trxId, requested_credits: calcData.credits })
         });
         const data = await res.json();
         if (data.ok) {
@@ -307,8 +347,11 @@
           const st = data.settings;
           const contactLink = st.contact_link || 'https://t.me/';
           document.getElementById('sidebar-contact-btn').href = contactLink;
+          document.getElementById('gw-contact-btn').href = contactLink;
 
-          if (st.price_info) document.getElementById('gw-dynamic-price').textContent = st.price_info;
+          globalPricePerCredit = st.price_per_credit || 0.50;
+          globalBdtRate = st.bdt_rate || 120;
+          updateCalculator();
 
           if (st.pay_binance) { document.getElementById('btn-binance').style.display = 'block'; document.getElementById('val-binance').value = st.pay_binance; }
           if (st.pay_webmoney) { document.getElementById('btn-webmoney').style.display = 'block'; document.getElementById('val-webmoney').value = st.pay_webmoney; }
