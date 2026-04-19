@@ -405,6 +405,33 @@ async def admin_update_payment(req: PaymentUpdate, x_admin_secret: str = Header(
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
+@app.get("/api/admin/promos")
+async def admin_get_promos(x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized.")
+    try:
+        res = admin_supabase.table("promo_codes").select("*").order("id", desc=True).execute()
+        return {"ok": True, "promos": res.data}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
+@app.post("/api/admin/promos")
+async def admin_create_promo(req: PromoCreate, x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized.")
+    try:
+        data = {
+            "code": req.code.strip().upper(),
+            "discount_percent": req.discount_percent,
+            "max_uses": req.max_uses,
+            "min_credits": req.min_credits,
+            "expiry_date": req.expiry_date
+        }
+        admin_supabase.table("promo_codes").insert(data).execute()
+        return {"ok": True, "message": "Promo code created."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
 # ── Pages ───────────────────────────────────────────────────────────────────────
 
 @app.get("/")
