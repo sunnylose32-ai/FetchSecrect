@@ -6,10 +6,25 @@
   <title>Admin Dashboard — TeleLink</title>
   <link rel="stylesheet" href="static/style.css"/>
   <style>
-    .admin-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-top: 2rem; }
+    .admin-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-top: 1rem; }
     .order-row { display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
     .auth-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 2000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
     .auth-card { max-width: 400px; width: 90%; padding: 2.5rem; background: var(--bg2); border: 1px solid var(--border-strong); border-radius: 20px; text-align: center; }
+    
+    .admin-tabs { display: flex; gap: 10px; border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 2rem; overflow-x: auto; }
+    .tab-btn { background: transparent; color: var(--text-muted); border: none; padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; transition: 0.2s; white-space: nowrap; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent-light); border-bottom: 2px solid var(--accent); }
+    
+    .admin-tab-content { display: none; }
+    .admin-tab-content.active { display: block; }
+
+    .users-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .users-table th, .users-table td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .users-table th { color: var(--accent-light); }
+    
+    .settings-form { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media(max-width: 800px) { .settings-form { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -20,12 +35,12 @@
   <div id="admin-auth-overlay" class="auth-overlay">
     <div class="auth-card">
       <div class="logo-icon" style="margin: 0 auto 1.5rem">🔑</div>
-      <h2 class="mb-2">Admin Access</h2>
-      <p class="text-muted mb-2">Please enter the master password to manage requests.</p>
+      <h2 class="mb-2">Admin CMS</h2>
+      <p class="text-muted mb-2">Please enter the master password.</p>
       <div class="input-group">
         <input type="password" id="admin-password-input" class="input" placeholder="••••••••" autofocus/>
       </div>
-      <button onclick="tryAdminLogin()" class="btn btn-primary w-full mt-2">Unlock Dashboard →</button>
+      <button onclick="tryAdminLogin()" class="btn btn-primary w-full mt-2">Unlock CMS →</button>
     </div>
   </div>
 
@@ -39,29 +54,113 @@
   </nav>
 
   <div class="container mt-2">
-    <div style="display:flex; justify-content:space-between; align-items:center" class="mb-2">
-      <h2>Global Request Queue</h2>
-      <button onclick="loadAdminDashboard()" class="btn btn-outline">🔄 Refresh</button>
+    <!-- TABS -->
+    <div class="admin-tabs">
+      <button class="tab-btn active" onclick="switchTab('requests')">Global Requests</button>
+      <button class="tab-btn" onclick="switchTab('users')">Manage Users</button>
+      <button class="tab-btn" onclick="switchTab('settings')">Site Settings</button>
     </div>
 
-    <div id="admin-queue" class="admin-grid">
-      <div class="text-center">Loading requests...</div>
+    <!-- TAB: REQUESTS -->
+    <div id="tab-requests" class="admin-tab-content active">
+      <div style="display:flex; justify-content:space-between; align-items:center" class="mb-2">
+        <h2>Order Queue</h2>
+        <button onclick="loadAdminDashboard()" class="btn btn-outline">🔄 Refresh</button>
+      </div>
+      <div id="admin-queue" class="admin-grid"><div class="text-center">Loading requests...</div></div>
     </div>
+
+    <!-- TAB: USERS -->
+    <div id="tab-users" class="admin-tab-content">
+      <div style="display:flex; justify-content:space-between; align-items:center" class="mb-2">
+        <h2>Registered Users</h2>
+        <button onclick="loadUsers()" class="btn btn-outline">🔄 Refresh</button>
+      </div>
+      <div class="admin-card" style="overflow-x:auto;">
+        <table class="users-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Joined</th>
+              <th>Trials/Credits</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="users-body"><tr><td colspan="4">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB: SETTINGS -->
+    <div id="tab-settings" class="admin-tab-content">
+      <div class="admin-card">
+        <h2 class="mb-2">Website Settings</h2>
+        <p class="text-muted mb-2">Update payment wallets and site configurations. Changes are instantly live.</p>
+        
+        <form id="settings-form" class="settings-form" onsubmit="saveSettings(event)">
+          <div class="input-group">
+            <label class="input-label">Default Free Trials (New Signups)</label>
+            <input type="number" id="cfg_trials" class="input" required/>
+          </div>
+          <div class="input-group">
+            <label class="input-label">Pricing Info / Payment Instructions</label>
+            <input type="text" id="cfg_price" class="input" placeholder="e.g. 1 Request = $5"/>
+          </div>
+          <div class="input-group">
+            <label class="input-label">Binance Pay ID</label>
+            <input type="text" id="cfg_binance" class="input"/>
+          </div>
+          <div class="input-group">
+            <label class="input-label">Webmoney WMT ID</label>
+            <input type="text" id="cfg_webmoney" class="input"/>
+          </div>
+          <div class="input-group">
+            <label class="input-label">USDT / TRX Address (TRC20)</label>
+            <input type="text" id="cfg_usdt" class="input"/>
+          </div>
+          <div class="input-group">
+            <label class="input-label">Nagad Number</label>
+            <input type="text" id="cfg_nagad" class="input"/>
+          </div>
+          <div class="input-group" style="grid-column: 1 / -1">
+            <label class="input-label">Contact Admin Link (e.g. Telegram Bot URL)</label>
+            <input type="url" id="cfg_contact" class="input" required/>
+          </div>
+          
+          <div style="grid-column: 1 / -1; margin-top:1rem;">
+            <button type="submit" id="save-settings-btn" class="btn btn-primary w-full">Save Settings</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
   </div>
 
   <script src="/static/config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="static/app.js"></script>
   <script>
     let currentAdminSecret = localStorage.getItem('admin_secret');
-    const queueEl = document.getElementById('admin-queue');
     const authOverlay = document.getElementById('admin-auth-overlay');
 
     if (currentAdminSecret) {
       authOverlay.style.display = 'none';
-      loadAdminDashboard();
+      switchTab('requests');
     }
 
+    /* ── Tab Switching ── */
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
+      
+      event.target.classList.add('active');
+      document.getElementById('tab-' + tabId).classList.add('active');
+
+      if (tabId === 'requests') loadAdminDashboard();
+      if (tabId === 'users') loadUsers();
+      if (tabId === 'settings') loadSettings();
+    }
+
+    /* ── Login Logic ── */
     async function tryAdminLogin() {
       const password = document.getElementById('admin-password-input').value;
       if (!password) { showToast('Enter password', 'error'); return; }
@@ -78,7 +177,7 @@
           localStorage.setItem('admin_secret', password);
           authOverlay.style.display = 'none';
           showToast('Dashboard Unlocked', 'success');
-          loadAdminDashboard();
+          switchTab('requests');
         } else {
           showToast('Invalid password', 'error');
         }
@@ -87,23 +186,15 @@
       }
     }
 
+    /* ── Requests Tab ── */
     async function loadAdminDashboard() {
       if (!currentAdminSecret) return;
-
       try {
-        const res = await fetch('/api/admin/requests', {
-          headers: { 'x-admin-secret': currentAdminSecret }
-        });
+        const res = await fetch('/api/admin/requests', { headers: { 'x-admin-secret': currentAdminSecret } });
         const data = await res.json();
-        
-        if (res.status === 403) {
-          lockAdmin();
-          showToast('Session expired or invalid password', 'error');
-          return;
-        }
-
+        if (res.status === 403) { lockAdmin(); return; }
         if (data.ok) {
-          queueEl.innerHTML = data.orders.map(o => `
+          document.getElementById('admin-queue').innerHTML = data.orders.map(o => `
             <div class="order-row">
               <div style="display:flex; justify-content:space-between; align-items:flex-start">
                 <div>
@@ -120,16 +211,25 @@
 
               <div class="order-status-actions">
                 <button class="btn btn-primary" onclick="showCompletionForm(${o.id})">✅ Complete Order</button>
-                <button class="btn btn-outline" onclick="updateStatus(${o.id}, 'Processing')">🔄 Mark Processing</button>
+                <button class="btn btn-outline" onclick="updateOrderStatus(${o.id}, 'Processing')">🔄 Mark Processing</button>
               </div>
 
-              <div id="form-${o.id}" class="completion-form" style="display:none">
+              <div id="form-${o.id}" class="completion-form" style="display:none; background:var(--bg2); padding:1rem; border-radius:8px; border:1px solid var(--border);">
+                <p class="mb-1 text-dim" style="font-size:0.9rem">Deliver via File Upload OR Link Data:</p>
+                
                 <div class="input-group">
-                  <label class="input-label">Result Link / Content</label>
-                  <input type="text" id="res-${o.id}" class="input" placeholder="Paste result URL..." value="${o.result_content || ''}"/>
+                  <label class="input-label">1. Upload Image/Video (Optional)</label>
+                  <input type="file" id="file-${o.id}" class="input" style="padding:0.5rem" accept="image/*,video/*" />
+                  <button class="btn btn-outline mt-1 w-full" onclick="uploadDeliveryFile(${o.id})">⬆️ Upload File Directly to Delivery</button>
                 </div>
+
+                <div class="input-group mt-2">
+                  <label class="input-label">2. Final Delivery Link</label>
+                  <input type="text" id="res-${o.id}" class="input" placeholder="Wait for upload, or paste link..." value="${o.result_content || ''}"/>
+                </div>
+
                 <div style="display:flex; gap:10px">
-                  <button class="btn btn-primary" onclick="submitCompletion(${o.id})">Save Result</button>
+                  <button class="btn btn-primary w-full" onclick="submitCompletion(${o.id})">🎉 Mark Completed & Send</button>
                   <button class="btn btn-ghost" onclick="hideCompletionForm(${o.id})">Cancel</button>
                 </div>
               </div>
@@ -138,50 +238,134 @@
             </div>
           `).join('') || '<div class="admin-card text-center">No orders found.</div>';
         }
-      } catch (err) {
-        showToast(err.message, 'error');
-      }
+      } catch (err) { showToast(err.message, 'error'); }
     }
 
     function showCompletionForm(id) { document.getElementById(`form-${id}`).style.display = 'block'; }
     function hideCompletionForm(id) { document.getElementById(`form-${id}`).style.display = 'none'; }
 
-    async function updateStatus(id, newStatus) {
-      try {
-        const res = await fetch('/api/admin/complete', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-admin-secret': currentAdminSecret 
-          },
-          body: JSON.stringify({ request_id: id, status: newStatus, result_content: '' })
-        });
-        const data = await res.json();
-        if (data.ok) { showToast('Status updated', 'success'); loadAdminDashboard(); }
-      } catch (e) { showToast(e.message, 'error'); }
+    async function updateOrderStatus(id, newStatus) {
+      const res = await fetch('/api/admin/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-secret': currentAdminSecret },
+        body: JSON.stringify({ request_id: id, status: newStatus, result_content: '' })
+      });
+      if ((await res.json()).ok) loadAdminDashboard();
+    }
+
+    async function uploadDeliveryFile(id) {
+      const fileInput = document.getElementById(`file-${id}`);
+      if (!fileInput.files.length) return showToast('Please select a file first.', 'error');
+      
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      showToast('Uploading file... please wait', 'success');
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        headers: { 'x-admin-secret': currentAdminSecret },
+        body: formData
+      });
+      const data = await res.json();
+      if (data.ok) {
+        document.getElementById(`res-${id}`).value = data.url;
+        showToast('File uploaded! Now click Mark Completed.', 'success');
+      } else {
+        showToast('Upload failed: ' + (data.detail || ''), 'error');
+      }
     }
 
     async function submitCompletion(id) {
       const result = document.getElementById(`res-${id}`).value;
+      if (!result) return showToast('Must provide a result link or upload a file.', 'error');
+      const res = await fetch('/api/admin/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-secret': currentAdminSecret },
+        body: JSON.stringify({ request_id: id, status: 'Completed', result_content: result })
+      });
+      if ((await res.json()).ok) { showToast('Order completed!', 'success'); loadAdminDashboard(); }
+    }
+
+    /* ── Users Tab ── */
+    async function loadUsers() {
+      if (!currentAdminSecret) return;
       try {
-        const res = await fetch('/api/admin/complete', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-admin-secret': currentAdminSecret 
-          },
-          body: JSON.stringify({ request_id: id, status: 'Completed', result_content: result })
-        });
+        const res = await fetch('/api/admin/users', { headers: { 'x-admin-secret': currentAdminSecret } });
         const data = await res.json();
-        if (data.ok) { showToast('Order completed!', 'success'); loadAdminDashboard(); }
-      } catch (e) { showToast(e.message, 'error'); }
+        if (data.ok) {
+          document.getElementById('users-body').innerHTML = data.users.map(u => `
+            <tr>
+              <td style="font-weight:600">${u.user_email || u.email || 'N/A'}</td>
+              <td class="text-dim text-sm">${new Date(u.created_at).toLocaleDateString()}</td>
+              <td>
+                <input type="number" id="trial-${u.id}" class="input" style="width:80px; padding:4px 8px" value="${u.free_trials_left || 0}" />
+              </td>
+              <td>
+                <button class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem" onclick="saveUserTrials('${u.id}')">Save Credits</button>
+              </td>
+            </tr>
+          `).join('') || '<tr><td colspan="4" class="text-center">No users found.</td></tr>';
+        }
+      } catch (err) {}
+    }
+
+    async function saveUserTrials(userId) {
+      const val = parseInt(document.getElementById(`trial-${userId}`).value || 0);
+      try {
+        const res = await fetch('/api/admin/users/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-secret': currentAdminSecret },
+          body: JSON.stringify({ user_id: userId, free_trials_left: val })
+        });
+        if ((await res.json()).ok) showToast('User credits updated!', 'success');
+      } catch (e) { showToast('Failed to update', 'error'); }
+    }
+
+    /* ── Settings Tab ── */
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/public/settings');
+        const data = await res.json();
+        if (data.ok && data.settings) {
+          const st = data.settings;
+          document.getElementById('cfg_trials').value = st.default_trials || 1;
+          document.getElementById('cfg_price').value = st.price_info || '';
+          document.getElementById('cfg_binance').value = st.pay_binance || '';
+          document.getElementById('cfg_webmoney').value = st.pay_webmoney || '';
+          document.getElementById('cfg_usdt').value = st.pay_usdt || '';
+          document.getElementById('cfg_nagad').value = st.pay_nagad || '';
+          document.getElementById('cfg_contact').value = st.contact_link || 'https://t.me/YourAdminBot';
+        }
+      } catch (e) {}
+    }
+
+    async function saveSettings(e) {
+      e.preventDefault();
+      const payload = {
+        default_trials: parseInt(document.getElementById('cfg_trials').value),
+        price_info: document.getElementById('cfg_price').value,
+        pay_binance: document.getElementById('cfg_binance').value,
+        pay_webmoney: document.getElementById('cfg_webmoney').value,
+        pay_usdt: document.getElementById('cfg_usdt').value,
+        pay_nagad: document.getElementById('cfg_nagad').value,
+        contact_link: document.getElementById('cfg_contact').value,
+      };
+
+      try {
+        const res = await fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-secret': currentAdminSecret },
+          body: JSON.stringify(payload)
+        });
+        if ((await res.json()).ok) showToast('Settings saved directly to Database!', 'success');
+      } catch (err) { showToast('Failed to save settings', 'error'); }
     }
 
     function lockAdmin() {
       localStorage.removeItem('admin_secret');
       currentAdminSecret = null;
       authOverlay.style.display = 'flex';
-      queueEl.innerHTML = '';
       document.getElementById('admin-password-input').value = '';
     }
   </script>

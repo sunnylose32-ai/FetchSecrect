@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Header, Response, Request
+from fastapi import FastAPI, HTTPException, Header, Response, Request, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -42,6 +42,19 @@ class CompleteRequest(BaseModel):
     status: str
     result_content: str
 
+class SettingsUpdate(BaseModel):
+    default_trials: int
+    price_info: str
+    pay_binance: str
+    pay_webmoney: str
+    pay_usdt: str
+    pay_nagad: str
+    contact_link: str
+
+class UserUpdate(BaseModel):
+    user_id: str
+    free_trials_left: int
+
 # ── Auth Middleware Helper ──────────────────────────────────────────────────────
 
 async def get_user_from_token(token: str):
@@ -62,13 +75,16 @@ async def submit_order(req: RequestSubmit, x_supabase_token: str = Header(None))
         profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
         
         if not profile_res.data:
+            settings_res = admin_supabase.table("site_settings").select("default_trials").eq("id", 1).execute()
+            default_t = settings_res.data[0].get("default_trials", 1) if settings_res.data else 1
+            
             # SELF-HEALING: Use UPSERT (Update if exists, otherwise create)
             print(f"🔄 Syncing missing profile for {user.email}")
             insert_res = admin_supabase.table("profiles").upsert({
                 "id": user.id,
                 "email": user.email,
                 "user_email": user.email,
-                "free_trials_left": 1
+                "free_trials_left": default_t
             }, on_conflict="id").execute()
             profile = insert_res.data[0]
         else:
@@ -81,7 +97,7 @@ async def submit_order(req: RequestSubmit, x_supabase_token: str = Header(None))
                 content={"ok": False, "detail": "LIMIT_REACHED", "msg": "Free trial used up."}
             )
 
-        # Insert request
+        # Insert request (Using ADMIN client to bypass RLS blocks)
         data = {
             "user_id": user.id,
             "user_email": user.email,
@@ -89,10 +105,10 @@ async def submit_order(req: RequestSubmit, x_supabase_token: str = Header(None))
             "content_link": req.content_link.strip(),
             "status": "Pending"
         }
-        supabase.table("requests").insert(data).execute()
+        admin_supabase.table("requests").insert(data).execute()
 
         # Decrement trial
-        supabase.table("profiles").update({
+        admin_supabase.table("profiles").update({
             "free_trials_left": profile["free_trials_left"] - 1
         }).eq("id", user.id).execute()
 
@@ -105,7 +121,8 @@ async def submit_order(req: RequestSubmit, x_supabase_token: str = Header(None))
 async def get_history(x_supabase_token: str = Header(None)):
     try:
         user = await get_user_from_token(x_supabase_token)
-        res = supabase.table("requests").select("*").eq("user_id", user.id).order("created_at", desc=True).execute()
+        # Using admin client here ensures users always see their history without RLS lag
+        res = admin_supabase.table("requests").select("*").eq("user_id", user.id).order("created_at", desc=True).execute()
         return {"ok": True, "orders": res.data}
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
@@ -117,18 +134,29 @@ async def get_profile(x_supabase_token: str = Header(None)):
         profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
         
         if not profile_res.data:
+            settings_res = admin_supabase.table("site_settings").select("default_trials").eq("id", 1).execute()
+            default_t = settings_res.data[0].get("default_trials", 1) if settings_res.data else 1
+            
             # SELF-HEALING: Use UPSERT
             insert_res = admin_supabase.table("profiles").upsert({
                 "id": user.id,
                 "email": user.email,
                 "user_email": user.email,
-                "free_trials_left": 1
+                "free_trials_left": default_t
             }, on_conflict="id").execute()
             profile = insert_res.data[0]
         else:
             profile = profile_res.data[0]
             
         return {"ok": True, "profile": profile}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
+@app.get("/api/public/settings")
+async def get_public_settings():
+    try:
+        res = admin_supabase.table("site_settings").select("*").eq("id", 1).execute()
+        return {"ok": True, "settings": res.data[0] if res.data else {}}
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
@@ -163,6 +191,71 @@ async def admin_complete_order(req: CompleteRequest, x_admin_secret: str = Heade
             "result_content": req.result_content
         }).eq("id", req.request_id).execute()
         return {"ok": True, "message": "Order updated successfully."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
+@app.get("/api/admin/users")
+async def admin_get_users(x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized.")
+    try:
+        res = admin_supabase.table("profiles").select("*").order("created_at", desc=True).execute()
+        return {"ok": True, "users": res.data}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
+@app.post("/api/admin/users/update")
+async def admin_update_user(req: UserUpdate, x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized.")
+    try:
+        admin_supabase.table("profiles").update({
+            "free_trials_left": req.free_trials_left
+        }).eq("id", req.user_id).execute()
+        return {"ok": True, "message": "User updated."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
+@app.post("/api/admin/settings")
+async def admin_update_settings(req: SettingsUpdate, x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized.")
+    try:
+        admin_supabase.table("site_settings").upsert({
+            "id": 1,
+            "default_trials": req.default_trials,
+            "price_info": req.price_info,
+            "pay_binance": req.pay_binance,
+            "pay_webmoney": req.pay_webmoney,
+            "pay_usdt": req.pay_usdt,
+            "pay_nagad": req.pay_nagad,
+            "contact_link": req.contact_link
+        }).execute()
+        return {"ok": True, "message": "Settings updated."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
+@app.post("/api/admin/upload")
+async def admin_upload_file(file: UploadFile = File(...), x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized.")
+    
+    try:
+        file_bytes = await file.read()
+        file_ext = file.filename.split(".")[-1]
+        import uuid
+        file_name = f"{uuid.uuid4()}.{file_ext}"
+        
+        # Upload using the admin client
+        admin_supabase.storage.from_("deliveries").upload(
+            path=file_name,
+            file=file_bytes,
+            file_options={"content-type": file.content_type}
+        )
+        
+        # Get the public URL
+        public_url = admin_supabase.storage.from_("deliveries").get_public_url(file_name)
+        return {"ok": True, "url": public_url}
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 

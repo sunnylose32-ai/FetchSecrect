@@ -8,9 +8,13 @@
   <style>
     .dashboard-grid { display: grid; grid-template-columns: 1fr 300px; gap: 2rem; margin-top: 2rem; }
     .payment-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 1000; display: none; align-items: center; justify-content: center; }
-    .payment-card { max-width: 500px; width: 90%; background: var(--bg2); padding: 2rem; border-radius: 20px; border: 1px solid var(--border-strong); box-shadow: 0 0 50px rgba(139,92,246,0.2); }
-    .pay-method { display: flex; align-items: center; justify-content: space-between; padding: 1rem; background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.75rem; transition: 0.2s; cursor: pointer; }
+    .payment-card { max-width: 500px; width: 90%; background: var(--bg2); padding: 2rem; border-radius: 20px; border: 1px solid var(--border-strong); box-shadow: 0 0 50px rgba(139,92,246,0.2); max-height: 90vh; overflow-y: auto; }
+    .pay-method { display: flex; flex-direction: column; padding: 1rem; background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.75rem; transition: 0.2s; }
     .pay-method:hover { border-color: var(--accent); background: var(--accent-dim); }
+    .pay-method-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+    .copy-box { display: flex; gap: 5px; background: var(--bg); padding: 5px; border-radius: 8px; border: 1px solid var(--border-strong); }
+    .copy-box input { flex: 1; background: transparent; border: none; color: var(--text); padding: 4px; pointer-events: none; font-family: monospace; }
+    .copy-btn { background: var(--accent); color: white; border: none; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
     @media (max-width: 800px) { .dashboard-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -21,28 +25,62 @@
   <!-- Payment Modal -->
   <div id="payment-modal" class="payment-modal">
     <div class="payment-card">
-      <h2 class="mb-2">Free Trial Used Up</h2>
-      <p class="text-muted mb-2">You have used your free trial. To continue unlocking content, please choose a payment method below.</p>
+      <h2 class="mb-2">Add Credits / Pay</h2>
       
-      <div class="pay-method">
-        <div><strong>Binance Pay (ID)</strong><br/><small class="text-dim">Fast & Real-time</small></div>
-        <span style="font-size:1.5rem">🪙</span>
+      <!-- Dynamic Price Text -->
+      <div id="dynamic-price-box" style="background: var(--accent-dim); padding: 1rem; border-radius: 8px; border: 1px solid var(--accent); margin-bottom: 1.5rem; text-align: center; display: none;">
+        <span id="dynamic-price" style="font-weight: 800; color: var(--accent-light);"></span>
       </div>
-      <div class="pay-method">
-        <div><strong>Webmoney WMT</strong><br/><small class="text-dim">WMID: 123456789</small></div>
-        <span style="font-size:1.5rem">🏦</span>
+
+      <p class="text-muted mb-2 text-sm">Please send the exact amount to one of the addresses below, then submit your Transaction ID to the admin.</p>
+      
+      <!-- Dynamic Pay Methods -->
+      <div id="pm-binance" class="pay-method" style="display:none">
+        <div class="pay-method-header">
+          <div><strong>Binance Pay (ID)</strong></div> <span style="font-size:1.5rem">🪙</span>
+        </div>
+        <div class="copy-box">
+          <input type="text" id="val-binance" value="" />
+          <button class="copy-btn" onclick="copyVal('val-binance')">Copy</button>
+        </div>
       </div>
-      <div class="pay-method">
-        <div><strong>USDT / TRX</strong><br/><small class="text-dim">Network: TRC20</small></div>
-        <span style="font-size:1.5rem">🌐</span>
+
+      <div id="pm-webmoney" class="pay-method" style="display:none">
+        <div class="pay-method-header">
+          <div><strong>Webmoney WMT</strong></div> <span style="font-size:1.5rem">🏦</span>
+        </div>
+        <div class="copy-box">
+          <input type="text" id="val-webmoney" value="" />
+          <button class="copy-btn" onclick="copyVal('val-webmoney')">Copy</button>
+        </div>
       </div>
-      <div class="pay-method">
-        <div><strong>Nagad (Send Money)</strong><br/><small class="text-dim">Agent/Personal: 017xxxxxx</small></div>
-        <span style="font-size:1.5rem">📱</span>
+
+      <div id="pm-usdt" class="pay-method" style="display:none">
+        <div class="pay-method-header">
+          <div><strong>USDT / TRX (TRC20)</strong></div> <span style="font-size:1.5rem">🌐</span>
+        </div>
+        <div class="copy-box">
+          <input type="text" id="val-usdt" value="" />
+          <button class="copy-btn" onclick="copyVal('val-usdt')">Copy</button>
+        </div>
+      </div>
+
+      <div id="pm-nagad" class="pay-method" style="display:none">
+        <div class="pay-method-header">
+          <div><strong>Nagad (Send Money)</strong></div> <span style="font-size:1.5rem">📱</span>
+        </div>
+        <div class="copy-box">
+          <input type="text" id="val-nagad" value="" />
+          <button class="copy-btn" onclick="copyVal('val-nagad')">Copy</button>
+        </div>
       </div>
       
-      <p class="text-dim mt-2" style="font-size:0.8rem; text-align:center;">After payment, contact admin with your Transaction ID to get balance.</p>
-      <button class="btn btn-outline w-full mt-2" onclick="closePayment()">Cancel</button>
+      <div style="background: var(--bg); padding: 1rem; border-radius: 12px; text-align: center; margin-top: 1.5rem;">
+        <p class="text-dim mb-1" style="font-size:0.85rem">Done paying? Notify the admin to receive your credits instantly:</p>
+        <a href="https://t.me/" target="_blank" id="contact-admin-btn" class="btn btn-primary w-full">✉️ Submit Transaction ID / Proof</a>
+      </div>
+
+      <button class="btn btn-ghost w-full mt-1" onclick="closePayment()">Cancel</button>
     </div>
   </div>
 
@@ -101,7 +139,7 @@
         <div class="admin-card">
           <h4>Account Status</h4>
           <div style="display:flex; justify-content:space-between; margin-top:1rem">
-            <span class="text-dim">Free Trials Left:</span>
+            <span class="text-dim">Available Credits:</span>
             <span id="trials-count" style="color:var(--accent-light); font-weight:800">--</span>
           </div>
           <div style="display:flex; justify-content:space-between; margin-top:0.5rem">
@@ -114,7 +152,7 @@
         <div class="admin-card mt-2">
           <h4>Urgent Support?</h4>
           <p class="text-muted" style="font-size:0.85rem">Contact our admin bot for bulk orders or questions.</p>
-          <a href="https://t.me/YourAdminBot" class="btn btn-primary w-full mt-2">Contact Admin</a>
+          <a href="#" target="_blank" id="sidebar-contact-btn" class="btn btn-primary w-full mt-2">Contact Admin</a>
         </div>
       </div>
 
@@ -127,6 +165,41 @@
   <script>
     const form = document.getElementById('request-form');
     const historyBody = document.getElementById('history-body');
+
+    // Utility: Copy text to clipboard
+    function copyVal(inputId) {
+      const el = document.getElementById(inputId);
+      navigator.clipboard.writeText(el.value).then(() => {
+        showToast('Address Copied!', 'success');
+      });
+    }
+
+    async function loadPublicSettings() {
+      try {
+        const res = await fetch('/api/public/settings');
+        const data = await res.json();
+        if (data.ok && data.settings) {
+          const st = data.settings;
+          
+          // Inject Contact Links
+          const contactLink = st.contact_link || 'https://t.me/';
+          document.getElementById('contact-admin-btn').href = contactLink;
+          document.getElementById('sidebar-contact-btn').href = contactLink;
+
+          // Inject Pricing
+          if (st.price_info) {
+            document.getElementById('dynamic-price-box').style.display = 'block';
+            document.getElementById('dynamic-price').textContent = st.price_info;
+          }
+
+          // Inject Wallets
+          if (st.pay_binance) { document.getElementById('pm-binance').style.display = 'flex'; document.getElementById('val-binance').value = st.pay_binance; }
+          if (st.pay_webmoney) { document.getElementById('pm-webmoney').style.display = 'flex'; document.getElementById('val-webmoney').value = st.pay_webmoney; }
+          if (st.pay_usdt) { document.getElementById('pm-usdt').style.display = 'flex'; document.getElementById('val-usdt').value = st.pay_usdt; }
+          if (st.pay_nagad) { document.getElementById('pm-nagad').style.display = 'flex'; document.getElementById('val-nagad').value = st.pay_nagad; }
+        }
+      } catch (e) { console.error("Failed to load settings:", e); }
+    }
 
     async function loadDashboard() {
       const session = await getSession();
@@ -160,7 +233,7 @@
               </td>
               <td>${getStatusBadge(o.status)}</td>
               <td>
-                ${o.result_content ? `<a href="${o.result_content}" target="_blank" class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem">View Result</a>` : '<span class="text-dim">Pending...</span>'}
+                ${o.result_content ? `<a href="${o.result_content}" target="_blank" class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem">View Delivery</a>` : '<span class="text-dim">Pending...</span>'}
               </td>
             </tr>
           `).join('') || '<tr><td colspan="4" class="text-center">No requests yet.</td></tr>';
@@ -210,6 +283,7 @@
     function openPayment() { document.getElementById('payment-modal').style.display = 'flex'; }
     function closePayment() { document.getElementById('payment-modal').style.display = 'none'; }
 
+    loadPublicSettings();
     loadDashboard();
   </script>
 </body>
