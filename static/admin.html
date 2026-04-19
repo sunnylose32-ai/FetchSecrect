@@ -8,21 +8,33 @@
   <style>
     .admin-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-top: 2rem; }
     .order-row { display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
-    .order-status-actions { display: flex; gap: 10px; margin-top: 10px; }
-    .completion-form { display: none; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+    .auth-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 2000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
+    .auth-card { max-width: 400px; width: 90%; padding: 2.5rem; background: var(--bg2); border: 1px solid var(--border-strong); border-radius: 20px; text-align: center; }
   </style>
 </head>
 <body>
   <div class="bg-orbs"></div>
   <div id="toast-container"></div>
 
+  <!-- Admin Password Overlay -->
+  <div id="admin-auth-overlay" class="auth-overlay">
+    <div class="auth-card">
+      <div class="logo-icon" style="margin: 0 auto 1.5rem">🔑</div>
+      <h2 class="mb-2">Admin Access</h2>
+      <p class="text-muted mb-2">Please enter the master password to manage requests.</p>
+      <div class="input-group">
+        <input type="password" id="admin-password-input" class="input" placeholder="••••••••" autofocus/>
+      </div>
+      <button onclick="tryAdminLogin()" class="btn btn-primary w-full mt-2">Unlock Dashboard →</button>
+    </div>
+  </div>
+
   <nav class="navbar">
     <a class="nav-logo" href="/">
       <div class="logo-icon">🔗</div> TeleLink Admin
     </a>
     <div style="display:flex; align-items:center; gap:20px">
-      <span id="admin-email" class="text-muted" style="font-size:0.9rem"></span>
-      <a href="/tool" class="btn btn-ghost">View As User</a>
+      <button onclick="lockAdmin()" class="btn btn-ghost">Lock Panel</button>
     </div>
   </nav>
 
@@ -33,7 +45,6 @@
     </div>
 
     <div id="admin-queue" class="admin-grid">
-      <!-- Admin orders will appear here -->
       <div class="text-center">Loading requests...</div>
     </div>
   </div>
@@ -42,27 +53,52 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="static/app.js"></script>
   <script>
+    let currentAdminSecret = localStorage.getItem('admin_secret');
     const queueEl = document.getElementById('admin-queue');
+    const authOverlay = document.getElementById('admin-auth-overlay');
+
+    if (currentAdminSecret) {
+      authOverlay.style.display = 'none';
+      loadAdminDashboard();
+    }
+
+    async function tryAdminLogin() {
+      const password = document.getElementById('admin-password-input').value;
+      if (!password) { showToast('Enter password', 'error'); return; }
+
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          currentAdminSecret = password;
+          localStorage.setItem('admin_secret', password);
+          authOverlay.style.display = 'none';
+          showToast('Dashboard Unlocked', 'success');
+          loadAdminDashboard();
+        } else {
+          showToast('Invalid password', 'error');
+        }
+      } catch (e) {
+        showToast('Login failed', 'error');
+      }
+    }
 
     async function loadAdminDashboard() {
-      const session = await getSession();
-      if (!session) { window.location.href = 'login.html'; return; }
-      document.getElementById('admin-email').textContent = session.user.email;
+      if (!currentAdminSecret) return;
 
       try {
         const res = await fetch('/api/admin/requests', {
-          headers: { 'x-supabase-token': session.access_token }
+          headers: { 'x-admin-secret': currentAdminSecret }
         });
         const data = await res.json();
         
         if (res.status === 403) {
-          queueEl.innerHTML = `
-            <div class="admin-card text-center">
-              <h3 style="color:var(--error)">Access Denied</h3>
-              <p class="text-muted">You are not an administrator. Please contact the system owner to enable admin access for your account.</p>
-              <br/>
-              <a href="tool.html" class="btn btn-primary">Back to My Tool</a>
-            </div>`;
+          lockAdmin();
+          showToast('Session expired or invalid password', 'error');
           return;
         }
 
@@ -87,21 +123,20 @@
                 <button class="btn btn-outline" onclick="updateStatus(${o.id}, 'Processing')">🔄 Mark Processing</button>
               </div>
 
-              <!-- Completion Form -->
-              <div id="form-${o.id}" class="completion-form">
+              <div id="form-${o.id}" class="completion-form" style="display:none">
                 <div class="input-group">
-                  <label class="input-label">Result content (Link or Zip link)</label>
-                  <input type="text" id="res-${o.id}" class="input" placeholder="Paste the result URL here..." value="${o.result_content || ''}"/>
+                  <label class="input-label">Result Link / Content</label>
+                  <input type="text" id="res-${o.id}" class="input" placeholder="Paste result URL..." value="${o.result_content || ''}"/>
                 </div>
                 <div style="display:flex; gap:10px">
-                  <button class="btn btn-primary" onclick="submitCompletion(${o.id})">Save & Notify User</button>
+                  <button class="btn btn-primary" onclick="submitCompletion(${o.id})">Save Result</button>
                   <button class="btn btn-ghost" onclick="hideCompletionForm(${o.id})">Cancel</button>
                 </div>
               </div>
 
               <small class="text-dim">Submitted: ${fmtDate(o.created_at)}</small>
             </div>
-          `).join('') || '<div class="admin-card text-center">No pending orders yet.</div>';
+          `).join('') || '<div class="admin-card text-center">No orders found.</div>';
         }
       } catch (err) {
         showToast(err.message, 'error');
@@ -112,13 +147,12 @@
     function hideCompletionForm(id) { document.getElementById(`form-${id}`).style.display = 'none'; }
 
     async function updateStatus(id, newStatus) {
-      const session = await getSession();
       try {
         const res = await fetch('/api/admin/complete', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'x-supabase-token': session.access_token 
+            'x-admin-secret': currentAdminSecret 
           },
           body: JSON.stringify({ request_id: id, status: newStatus, result_content: '' })
         });
@@ -129,15 +163,12 @@
 
     async function submitCompletion(id) {
       const result = document.getElementById(`res-${id}`).value;
-      if (!result) { showToast('Please enter a result link', 'error'); return; }
-
-      const session = await getSession();
       try {
         const res = await fetch('/api/admin/complete', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'x-supabase-token': session.access_token 
+            'x-admin-secret': currentAdminSecret 
           },
           body: JSON.stringify({ request_id: id, status: 'Completed', result_content: result })
         });
@@ -146,7 +177,13 @@
       } catch (e) { showToast(e.message, 'error'); }
     }
 
-    loadAdminDashboard();
+    function lockAdmin() {
+      localStorage.removeItem('admin_secret');
+      currentAdminSecret = null;
+      authOverlay.style.display = 'flex';
+      queueEl.innerHTML = '';
+      document.getElementById('admin-password-input').value = '';
+    }
   </script>
 </body>
 </html>

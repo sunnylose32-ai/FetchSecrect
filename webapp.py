@@ -50,76 +50,90 @@ async def get_user_from_token(token: str):
 async def submit_order(req: RequestSubmit, x_supabase_token: str = Header(None)):
     user = await get_user_from_token(x_supabase_token)
     
-    # Check free trials left
-    profile = supabase.table("profiles").select("*").eq("id", user.id).single().execute()
-    if profile.data["free_trials_left"] <= 0:
-        return JSONResponse(
-            status_code=402, 
-            content={"detail": "LIMIT_REACHED", "msg": "You have used your free trial. Please pay to continue."}
-        )
+    try:
+        # Check free trials left
+        profile_res = supabase.table("profiles").select("*").eq("id", user.id).single().execute()
+        profile = profile_res.data
+        if not profile:
+            return JSONResponse(status_code=400, content={"ok": False, "detail": "Profile not found. Please relogin."})
+            
+        if profile["free_trials_left"] <= 0:
+            return JSONResponse(
+                status_code=402, 
+                content={"ok": False, "detail": "LIMIT_REACHED", "msg": "Free trial used up."}
+            )
 
-    # Insert request
-    data = {
-        "user_id": user.id,
-        "user_email": user.email,
-        "channel_link": req.channel_link.strip(),
-        "content_link": req.content_link.strip(),
-        "status": "Pending"
-    }
-    supabase.table("requests").insert(data).execute()
+        # Insert request
+        data = {
+            "user_id": user.id,
+            "user_email": user.email,
+            "channel_link": req.channel_link.strip(),
+            "content_link": req.content_link.strip(),
+            "status": "Pending"
+        }
+        supabase.table("requests").insert(data).execute()
 
-    # Decrement trial (only if it was > 0)
-    supabase.table("profiles").update({
-        "free_trials_left": profile.data["free_trials_left"] - 1
-    }).eq("id", user.id).execute()
+        # Decrement trial
+        supabase.table("profiles").update({
+            "free_trials_left": profile["free_trials_left"] - 1
+        }).eq("id", user.id).execute()
 
-    return {"ok": True, "message": "Request submitted! Admin will process it soon."}
+        return {"ok": True, "message": "Request submitted! Admin will process it soon."}
+    except Exception as e:
+        print(f"❌ Submission Error: {e}")
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
 @app.get("/api/orders/history")
 async def get_history(x_supabase_token: str = Header(None)):
-    user = await get_user_from_token(x_supabase_token)
-    res = supabase.table("requests").select("*").eq("user_id", user.id).order("created_at", desc=True).execute()
-    return {"ok": True, "orders": res.data}
+    try:
+        user = await get_user_from_token(x_supabase_token)
+        res = supabase.table("requests").select("*").eq("user_id", user.id).order("created_at", desc=True).execute()
+        return {"ok": True, "orders": res.data}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
 @app.get("/api/profile/me")
 async def get_profile(x_supabase_token: str = Header(None)):
-    user = await get_user_from_token(x_supabase_token)
-    profile = supabase.table("profiles").select("*").eq("id", user.id).single().execute()
-    return {"ok": True, "profile": profile.data}
+    try:
+        user = await get_user_from_token(x_supabase_token)
+        profile_res = supabase.table("profiles").select("*").eq("id", user.id).single().execute()
+        return {"ok": True, "profile": profile_res.data}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
 # ── Admin Routes ────────────────────────────────────────────────────────────────
 
+@app.post("/api/admin/login")
+async def admin_login(req: dict):
+    password = req.get("password")
+    if not Config.ADMIN_PASSWORD or password != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Invalid admin password.")
+    return {"ok": True, "message": "Admin authenticated."}
+
 @app.get("/api/admin/requests")
-async def admin_get_requests(x_supabase_token: str = Header(None)):
-    user = await get_user_from_token(x_supabase_token)
-    # 1. Check if email matches hardcoded ADMIN_EMAIL in .env
-    if Config.ADMIN_EMAIL and user.email == Config.ADMIN_EMAIL:
-        pass # Allow access
-    else:
-        # 2. Otherwise check the DB flag
-        profile = supabase.table("profiles").select("is_admin").eq("id", user.id).single().execute()
-        if not profile.data or not profile.data["is_admin"]:
-            raise HTTPException(status_code=403, detail="Access denied. Admins only.")
+async def admin_get_requests(x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized. Admin password required.")
     
-    res = supabase.table("requests").select("*").order("created_at", desc=True).execute()
-    return {"ok": True, "orders": res.data}
+    try:
+        res = supabase.table("requests").select("*").order("created_at", desc=True).execute()
+        return {"ok": True, "orders": res.data}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
 @app.post("/api/admin/complete")
-async def admin_complete_order(req: CompleteRequest, x_supabase_token: str = Header(None)):
-    user = await get_user_from_token(x_supabase_token)
-    if Config.ADMIN_EMAIL and user.email == Config.ADMIN_EMAIL:
-        pass
-    else:
-        profile = supabase.table("profiles").select("is_admin").eq("id", user.id).single().execute()
-        if not profile.data or not profile.data["is_admin"]:
-            raise HTTPException(status_code=403, detail="Access denied.")
+async def admin_complete_order(req: CompleteRequest, x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized.")
 
-    supabase.table("requests").update({
-        "status": req.status,
-        "result_content": req.result_content
-    }).eq("id", req.request_id).execute()
-
-    return {"ok": True, "message": "Order updated successfully."}
+    try:
+        supabase.table("requests").update({
+            "status": req.status,
+            "result_content": req.result_content
+        }).eq("id", req.request_id).execute()
+        return {"ok": True, "message": "Order updated successfully."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
 # ── Pages ───────────────────────────────────────────────────────────────────────
 
