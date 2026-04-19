@@ -8,13 +8,16 @@ Usage:
     python main.py
 """
 
+import os
+os.environ["PYROGRAM_NO_SYNC"] = "1"
+
 import asyncio
 import uvicorn
-import bot  # Registers all Telegram handlers as a side effect
-from webapp import app
 
 
 async def main():
+    from webapp import app
+    import bot
     # ── Start Pyrogram clients ──────────────────────────────────────────────────
     await bot.bot.start()
     print("✅ Telegram bot started")

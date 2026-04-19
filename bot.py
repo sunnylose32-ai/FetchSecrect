@@ -2,7 +2,7 @@ import asyncio
 import re
 import logging
 import os
-from pyrogram import Client, filters, idle
+from pyrogram import Client, filters
 from pyrogram.enums import ChatAction
 from pyrogram.errors import FloodWait
 from config import Config
@@ -343,7 +343,6 @@ async def run_bot():
             logger.error(f"❌ Userbot failed to start: {e}")
 
     logger.info("Bot is running!")
-    await idle()
     await bot.stop()
     if user:
         try: await user.stop()
