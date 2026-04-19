@@ -426,6 +426,15 @@
       authOverlay.style.display = 'flex';
       document.getElementById('admin-password-input').value = '';
     }
+
+    // Auto-update Admin UI every 15 seconds!
+    setInterval(() => {
+      if (currentAdminSecret) {
+        if (document.getElementById('tab-requests').classList.contains('active')) loadAdminDashboard();
+        if (document.getElementById('tab-deposits').classList.contains('active')) loadDeposits();
+        if (document.getElementById('tab-users').classList.contains('active')) loadUsers();
+      }
+    }, 15000);
   </script>
 </body>
 </html>

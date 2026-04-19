@@ -97,18 +97,37 @@
           <div class="success-icon">✅</div>
           <h2 class="mb-1">Payment Sent</h2>
           <p class="text-dim text-sm mb-2" style="background: rgba(139,92,246,0.1); padding: 1rem; border-radius: 12px; border: 1px solid var(--accent-dark);">
-            Please submit your <strong>Transaction ID / Reference Name</strong> below so our system can verify and instantly add credits to your account.
+            Please submit your proof below so our system can verify and instantly add credits to your account.
           </p>
 
           <div class="input-group text-left mt-2">
-            <label class="input-label">Transaction ID / Sender Details</label>
-            <input type="text" id="gw-trx-id" class="input" placeholder="e.g. TRX123456789" />
+            <label class="input-label" id="dynamic-tx-label">Transaction ID / Sender Details</label>
+            <input type="text" id="gw-trx-id" class="input" placeholder="e.g. TXID, Hash, or Sender Name" />
           </div>
 
           <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 10px;">
-            <button class="btn btn-primary w-full" onclick="submitTransaction()" id="gw-submit-tx-btn">Verify Transaction</button>
-            <button class="btn btn-outline w-full" onclick="closeGateway()">Done</button>
+            <button class="btn btn-primary w-full" onclick="submitTransaction()" id="gw-submit-tx-btn">Verify Payment</button>
+            <button class="btn btn-ghost w-full" onclick="cancelCheckout()">Back</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Screen 4: Urgent Contact (Appears after submission) -->
+      <div id="gw-step-4" class="gw-step">
+        <div class="gw-body text-center">
+          <div class="success-icon">🎉</div>
+          <h2 class="mb-1">Submitted Successfully!</h2>
+          <p class="text-dim text-sm mb-2">
+            Your verification request is now waiting in the Admin's queue.
+          </p>
+
+          <div style="background:var(--card); padding:1rem; border-radius:12px; margin-top:2rem;">
+            <h4 class="mb-1" style="color:var(--text)">Want it approved instantly?</h4>
+            <p class="text-dim text-sm mb-2">Send a message to the Admin right now for urgent/immediate crediting.</p>
+            <a href="#" target="_blank" id="gw-contact-btn" class="btn btn-primary pulse-btn w-full">✉️ Contact Admin Now</a>
+          </div>
+
+          <button class="btn btn-outline w-full mt-2" onclick="closeGateway()">Close Gateway</button>
         </div>
       </div>
 
@@ -239,11 +258,22 @@
     }
 
     function cancelCheckout() { setGwStep(1); }
-    function completeCheckout() { setGwStep(3); }
+    function completeCheckout() {
+      // Dynamic Labels based on payment method
+      const lbl = document.getElementById('dynamic-tx-label');
+      if (currentCheckoutMethod.includes('Binance')) {
+        lbl.textContent = "Binance Pay ID / Your Binance Name";
+      } else if (currentCheckoutMethod.includes('USDT') || currentCheckoutMethod.includes('TRX')) {
+        lbl.textContent = "TXID / Network Hash";
+      } else {
+        lbl.textContent = "Transaction ID / Sender Name / Email";
+      }
+      setGwStep(3); 
+    }
 
     async function submitTransaction() {
       const trxId = document.getElementById('gw-trx-id').value;
-      if (!trxId) return showToast('Please enter your Transaction ID.', 'error');
+      if (!trxId) return showToast('Please enter the required information.', 'error');
 
       const btn = document.getElementById('gw-submit-tx-btn');
       btn.disabled = true;
@@ -258,14 +288,13 @@
         });
         const data = await res.json();
         if (data.ok) {
-          showToast('Transaction submitted! Awaiting Admin approval.', 'success');
-          closeGateway();
-          loadDashboard(); // Refresh deposits table
+          loadDashboard(); // Refresh deposits table instantly
+          setGwStep(4); // Move to Screen 4 (Contact Admin)
         } else { showToast(data.detail || 'Error submitting tx', 'error'); }
       } catch (e) { showToast(e.message, 'error'); }
       
       btn.disabled = false;
-      btn.textContent = 'Verify Transaction';
+      btn.textContent = 'Verify Payment';
     }
 
 
@@ -358,6 +387,11 @@
 
     loadPublicSettings();
     loadDashboard();
+    
+    // Auto-update UI every 15 seconds so changes from Admin show up automatically!
+    setInterval(() => {
+      loadDashboard();
+    }, 15000);
   </script>
 </body>
 </html>
