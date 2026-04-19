@@ -58,6 +58,12 @@
             <div style="margin-top:0.5rem; font-size:1.4rem; font-weight:900; color:var(--accent-light);">
               Total: $<span id="calc-usd-total">0.00</span>
             </div>
+            
+            <div style="margin-top:1rem; border-top:1px dashed var(--border); padding-top:1rem; display:flex; gap:10px;">
+               <input type="text" id="promo-input" class="input" placeholder="Promo Code (Optional)" style="flex:1" oninput="this.value = this.value.toUpperCase()"/>
+               <button class="btn btn-outline" onclick="applyPromo()" id="btn-apply-promo">Apply</button>
+            </div>
+            <p id="promo-msg" class="text-sm mt-1" style="display:none"></p>
           </div>
         </div>
         <div class="gw-body" style="padding-top:1rem">
@@ -251,6 +257,8 @@
     let globalPricePerCredit = 0.5;
     let globalBdtRate = 120;
     let isPremiumUser = false;
+    let appliedPromoCode = null;
+    let appliedDiscount = 0;
 
     /* ── UI Logic ── */
     function updateFormUI() {
@@ -298,9 +306,58 @@
     function updateCalculator() {
       let val = parseInt(document.getElementById('buy-amount').value);
       if (isNaN(val) || val < 10) val = 10;
-      const totalUsd = (val * globalPricePerCredit).toFixed(2);
-      document.getElementById('calc-usd-total').textContent = totalUsd;
-      return { credits: val, usd: totalUsd };
+      let totalUsd = (val * globalPricePerCredit);
+      
+      const totalEl = document.getElementById('calc-usd-total');
+      if (appliedDiscount > 0) {
+        const discounted = totalUsd * (1 - (appliedDiscount / 100));
+        totalEl.innerHTML = `<span style="text-decoration:line-through; color:var(--text-muted); font-size:1rem">$${totalUsd.toFixed(2)}</span> <span style="color:var(--success)">$${discounted.toFixed(2)}</span>`;
+        totalUsd = discounted;
+      } else {
+        totalEl.textContent = totalUsd.toFixed(2);
+      }
+      return { credits: val, usd: totalUsd.toFixed(2) };
+    }
+
+    async function applyPromo() {
+      const code = document.getElementById('promo-input').value.trim();
+      const msg = document.getElementById('promo-msg');
+      if (!code) {
+        appliedPromoCode = null;
+        appliedDiscount = 0;
+        msg.style.display = 'none';
+        updateCalculator();
+        return;
+      }
+      
+      const buyAmount = parseInt(document.getElementById('buy-amount').value) || 10;
+      const btn = document.getElementById('btn-apply-promo');
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/promo/validate', {
+          method: 'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ code: code, buy_amount: buyAmount })
+        });
+        const data = await res.json();
+        
+        msg.style.display = 'block';
+        if (data.ok) {
+          appliedPromoCode = code;
+          appliedDiscount = data.discount_percent;
+          msg.textContent = `🎉 Promo Applied: ${appliedDiscount}% OFF!`;
+          msg.style.color = 'var(--success)';
+          updateCalculator();
+        } else {
+          appliedPromoCode = null;
+          appliedDiscount = 0;
+          msg.textContent = data.detail;
+          msg.style.color = 'var(--error)';
+          updateCalculator();
+        }
+      } catch(e) { }
+      btn.disabled = false;
     }
 
     /* ── Gateway Logic ── */
@@ -373,7 +430,7 @@
         const res = await fetch('/api/payments/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-supabase-token': session.access_token },
-          body: JSON.stringify({ method: payMethodName, trx_id: trxId, requested_credits: calcData.credits })
+          body: JSON.stringify({ method: payMethodName, trx_id: trxId, requested_credits: calcData.credits, promo_code: appliedPromoCode })
         });
         const data = await res.json();
         if (data.ok) {

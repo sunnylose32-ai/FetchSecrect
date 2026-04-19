@@ -62,6 +62,18 @@ class PaymentSubmit(BaseModel):
     method: str
     trx_id: str
     requested_credits: int
+    promo_code: str = None
+
+class PromoValidate(BaseModel):
+    code: str
+    buy_amount: int
+
+class PromoCreate(BaseModel):
+    code: str
+    discount_percent: int
+    max_uses: int
+    min_credits: int
+    expiry_date: str
 
 class PaymentUpdate(BaseModel):
     payment_id: int
@@ -181,17 +193,55 @@ async def get_public_settings():
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
+@app.post("/api/promo/validate")
+async def validate_promo(req: PromoValidate):
+    try:
+        from datetime import datetime, timezone
+        res = admin_supabase.table("promo_codes").select("*").eq("code", req.code.strip().upper()).execute()
+        if not res.data:
+            return JSONResponse(status_code=404, content={"ok": False, "detail": "Invalid or non-existent promo code."})
+        promo = res.data[0]
+
+        if promo.get("current_uses", 0) >= promo.get("max_uses", 0):
+            return JSONResponse(status_code=400, content={"ok": False, "detail": "This promo code has reached its maximum uses."})
+        
+        if promo.get("expiry_date"):
+            # Assume UTC
+            exp = datetime.fromisoformat(promo["expiry_date"].replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) > exp:
+                return JSONResponse(status_code=400, content={"ok": False, "detail": "This promo code has expired."})
+                
+        if req.buy_amount < promo.get("min_credits", 0):
+             return JSONResponse(status_code=400, content={"ok": False, "detail": f"You must buy at least {promo['min_credits']} credits to use this."})
+             
+        return {"ok": True, "discount_percent": promo["discount_percent"]}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
 @app.post("/api/payments/submit")
 async def submit_payment(req: PaymentSubmit, x_supabase_token: str = Header(None)):
     user = await get_user_from_token(x_supabase_token)
     try:
+        applied_promo = None
+        if req.promo_code:
+            code = req.promo_code.strip().upper()
+            res = admin_supabase.table("promo_codes").select("*").eq("code", code).execute()
+            if res.data:
+                promo = res.data[0]
+                # Increment usage
+                admin_supabase.table("promo_codes").update({
+                    "current_uses": promo["current_uses"] + 1
+                }).eq("code", code).execute()
+                applied_promo = code
+
         data = {
             "user_id": user.id,
             "user_email": user.email,
             "method": req.method,
             "trx_id": req.trx_id.strip(),
             "status": "Pending",
-            "requested_credits": req.requested_credits
+            "requested_credits": req.requested_credits,
+            "promo_code": applied_promo
         }
         admin_supabase.table("transactions").insert(data).execute()
         return {"ok": True, "message": "Transaction submitted for verification."}
@@ -340,6 +390,16 @@ async def admin_update_payment(req: PaymentUpdate, x_admin_secret: str = Header(
                         "free_trials_left": current + req.add_credits,
                         "is_premium": True
                     }).eq("id", uid).execute()
+                    
+        # If rejected, refund the promo code usage
+        if req.status == "Rejected":
+            tx_res = admin_supabase.table("transactions").select("promo_code").eq("id", req.payment_id).execute()
+            if tx_res.data and tx_res.data[0].get("promo_code"):
+                code = tx_res.data[0]["promo_code"]
+                prom_res = admin_supabase.table("promo_codes").select("current_uses").eq("code", code).execute()
+                if prom_res.data:
+                    current = prom_res.data[0].get("current_uses", 0)
+                    admin_supabase.table("promo_codes").update({"current_uses": max(0, current - 1)}).eq("code", code).execute()
 
         return {"ok": True, "message": "Transaction updated successfully."}
     except Exception as e:

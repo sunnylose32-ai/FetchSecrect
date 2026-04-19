@@ -59,6 +59,7 @@
       <button class="tab-btn active" onclick="switchTab('requests')">Global Requests</button>
       <button class="tab-btn" onclick="switchTab('deposits')">Manage Deposits</button>
       <button class="tab-btn" onclick="switchTab('users')">Manage Users</button>
+      <button class="tab-btn" onclick="switchTab('promos')">Promo Codes</button>
       <button class="tab-btn" onclick="switchTab('settings')">Site Settings</button>
     </div>
 
@@ -161,7 +162,57 @@
         </form>
       </div>
     </div>
+    <!-- TAB: PROMOS -->
+    <div id="tab-promos" class="admin-tab-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem">
+        <div>
+          <h2 class="mb-2">Promo Codes</h2>
+          <p class="text-muted text-sm">Create and manage exact discount codes to drive sales.</p>
+        </div>
+        <button class="btn btn-primary" onclick="document.getElementById('promo-modal').style.display='flex'">+ Create Promo</button>
+      </div>
+      <div class="admin-card" style="overflow-x:auto;">
+        <table class="users-table">
+          <thead><tr><th>Date Created</th><th>Code</th><th>Discount</th><th>Constraints</th></tr></thead>
+          <tbody id="promos-body"><tr><td colspan="4" style="text-align:center">Loading Promos...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
+  <!-- Modal: Create Promo -->
+  <div id="promo-modal" class="payment-modal" style="display:none; z-index:1000">
+    <div class="payment-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem">
+        <h2 style="font-size:1.2rem; color:var(--text)">Create Promo Code</h2>
+        <button class="btn btn-outline" style="padding:4px 8px; border:none; color:var(--text-muted)" onclick="document.getElementById('promo-modal').style.display='none'">✖</button>
+      </div>
+      <form onsubmit="createPromo(event)">
+        <div class="input-group">
+          <label class="input-label">Promotional Code (e.g. WELCOME50)</label>
+          <input type="text" id="pr-code" class="input" style="text-transform:uppercase" required/>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Discount Percentage (e.g. 50)</label>
+          <input type="number" id="pr-disc" class="input" min="1" max="100" required/>
+        </div>
+        <div style="display:flex; gap:10px">
+          <div class="input-group" style="flex:1">
+            <label class="input-label">Max Total Uses</label>
+            <input type="number" id="pr-uses" class="input" placeholder="100" required/>
+          </div>
+          <div class="input-group" style="flex:1">
+            <label class="input-label">Min. Credits Req.</label>
+            <input type="number" id="pr-min" class="input" value="10" required/>
+          </div>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Expiry Date</label>
+          <input type="date" id="pr-exp" class="input" required/>
+        </div>
+        <button type="submit" class="btn btn-primary w-full mt-2">Generate Code</button>
+      </form>
+    </div>
   </div>
 
   <script src="/static/config.js"></script>
@@ -187,6 +238,7 @@
       if (tabId === 'deposits') loadDeposits();
       if (tabId === 'users') loadUsers();
       if (tabId === 'settings') loadSettings();
+      if (tabId === 'promos') loadPromos();
     }
 
     /* ── Login Logic ── */
@@ -319,7 +371,11 @@
                 <span style="color:var(--text)">${p.method}</span><br/>
                 <small style="font-family:monospace; color:var(--accent-light)">TxID: ${p.trx_id}</small>
               </td>
-              <td>${getStatusBadge(p.status)}<br/><small style="color:var(--success)">Bought ${p.requested_credits || 10} Credits</small></td>
+              <td>
+                ${getStatusBadge(p.status)}<br/>
+                <small style="color:var(--success)">Bought ${p.requested_credits || 10} Credits</small>
+                ${p.promo_code ? `<br/><span style="display:inline-block; margin-top:3px; background:var(--accent); color:#fff; font-size:0.6rem; padding:2px 4px; border-radius:4px">🎁 PROMO: ${p.promo_code}</span>` : ''}
+              </td>
               <td>
                 ${p.status === 'Pending' ? `
                   <button class="btn btn-primary mb-1" style="padding:4px 8px; font-size:0.8rem; width:100%" onclick="approveDeposit(${p.id}, ${p.requested_credits || 10})">Approve & Credit</button>
