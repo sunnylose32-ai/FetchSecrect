@@ -174,13 +174,24 @@
           <p class="text-muted mb-2">Paste the links below. Our team will process your request within 5-15 minutes.</p>
           
           <form id="request-form">
+            <p class="text-dim text-sm mb-1">Select Mode:</p>
+            <div style="display:flex; gap:15px; margin-bottom:1rem; flex-wrap:wrap">
+              <label style="cursor:pointer; display:flex; align-items:center; gap:5px"><input type="radio" name="req_type" value="single" checked onchange="updateFormUI()"> Single Post</label>
+              <label style="cursor:pointer; display:flex; align-items:center; gap:5px; color:var(--accent-light)"><input type="radio" name="req_type" value="range" onchange="updateFormUI()"> Bulk Range 👑</label>
+              <label style="cursor:pointer; display:flex; align-items:center; gap:5px; color:var(--accent-light)"><input type="radio" name="req_type" value="channel" onchange="updateFormUI()"> Full Channel 👑</label>
+            </div>
+
             <div class="input-group">
-              <label class="input-label">Invite Link / Channel Username</label>
+              <label class="input-label" id="lbl-channel">Channel Invite Link / Username</label>
               <input type="text" id="channel-link" class="input" placeholder="e.g., https://t.me/+AbcXyz123 or @Username" required/>
             </div>
-            <div class="input-group">
-              <label class="input-label">Target Post/Message Link</label>
-              <input type="text" id="content-link" class="input" placeholder="e.g., https://t.me/c/12345/6789" required/>
+            <div class="input-group" id="grp-content">
+              <label class="input-label" id="lbl-content">Target Post Link</label>
+              <input type="text" id="content-link" class="input" placeholder="e.g., https://t.me/c/12345/6789" />
+            </div>
+            <div class="input-group" id="grp-bulk" style="display:none">
+              <label class="input-label">End Post Link (For Bulk)</label>
+              <input type="text" id="bulk-end-link" class="input" placeholder="e.g., https://t.me/c/12345/6800" />
             </div>
             <button type="submit" id="submit-btn" class="btn btn-primary w-full">🚀 Submit Request</button>
           </form>
@@ -212,8 +223,8 @@
             <span id="trials-count" style="color:var(--accent-light); font-weight:800">--</span>
           </div>
           <div style="display:flex; justify-content:space-between; margin-top:0.5rem">
-            <span class="text-dim">Verfied:</span>
-            <span style="color:var(--success)">✅</span>
+            <span class="text-dim">Premium Unlocked:</span>
+            <span id="premium-status" style="color:var(--text-muted)">🔒 No</span>
           </div>
           <button class="btn btn-outline w-full mt-2" onclick="openGateway()">Add Balance</button>
         </div>
@@ -239,6 +250,44 @@
     let payMethodName = '';
     let globalPricePerCredit = 0.5;
     let globalBdtRate = 120;
+    let isPremiumUser = false;
+
+    /* ── UI Logic ── */
+    function updateFormUI() {
+      const mode = document.querySelector('input[name="req_type"]:checked').value;
+      if (mode !== 'single' && !isPremiumUser) {
+        document.querySelector('input[name="req_type"][value="single"]').checked = true;
+        showToast('🔒 You must buy credits once to unlock Premium Bulk Requests!', 'error');
+        return updateFormUI(); // recurse to reset UI
+      }
+
+      const contentGrp = document.getElementById('grp-content');
+      const bulkGrp = document.getElementById('grp-bulk');
+      const lblChannel = document.getElementById('lbl-channel');
+      const lblContent = document.getElementById('lbl-content');
+
+      if (mode === 'single') {
+        contentGrp.style.display = 'block';
+        bulkGrp.style.display = 'none';
+        lblChannel.textContent = 'Channel Invite Link / Username';
+        lblContent.textContent = 'Target Post Link';
+        document.getElementById('content-link').required = true;
+        document.getElementById('bulk-end-link').required = false;
+      } else if (mode === 'range') {
+        contentGrp.style.display = 'block';
+        bulkGrp.style.display = 'block';
+        lblChannel.textContent = 'Channel Invite Link / Username';
+        lblContent.textContent = 'Start Target Link (Link A)';
+        document.getElementById('content-link').required = true;
+        document.getElementById('bulk-end-link').required = true;
+      } else if (mode === 'channel') {
+        contentGrp.style.display = 'none';
+        bulkGrp.style.display = 'none';
+        lblChannel.textContent = 'Channel Invite Link / Username';
+        document.getElementById('content-link').required = false;
+        document.getElementById('bulk-end-link').required = false;
+      }
+    }
 
     /* ── Utilities ── */
     function copyVal(inputId) {
@@ -370,7 +419,14 @@
       try {
         const res = await fetch('/api/profile/me', { headers: { 'x-supabase-token': session.access_token } });
         const data = await res.json();
-        if (data.ok) document.getElementById('trials-count').textContent = data.profile.free_trials_left;
+        if (data.ok) {
+          document.getElementById('trials-count').textContent = data.profile.free_trials_left;
+          isPremiumUser = data.profile.is_premium || false;
+          if (isPremiumUser) {
+            document.getElementById('premium-status').innerHTML = '🏆 Yes';
+            document.getElementById('premium-status').style.color = 'var(--warning)';
+          }
+        }
       } catch (e) {}
 
       // Load Requests History
@@ -381,7 +437,9 @@
           historyBody.innerHTML = data.orders.map(o => `<tr>
             <td>${fmtDate(o.created_at)}</td>
             <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis">
+              <span class="badge badge-outline" style="font-size:0.7rem; padding:2px 6px; border-radius:4px; margin-bottom:5px; display:inline-block">${o.request_type.toUpperCase()}</span><br/>
               <small>${o.channel_link}</small><br/><small class="text-dim">${o.content_link}</small>
+              ${o.bulk_end_link ? `<br/><small class="text-dim" style="color:var(--accent-dim)">To: ${o.bulk_end_link}</small>` : ''}
             </td>
             <td>${getStatusBadge(o.status)}</td>
             <td>${o.result_content ? `<a href="${o.result_content}" target="_blank" class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem">View Delivery</a>` : '<span class="text-dim">Pending...</span>'}</td>
@@ -407,10 +465,14 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const session = await getSession();
+      const mode = document.querySelector('input[name="req_type"]:checked').value;
       const payload = {
+        request_type: mode,
         channel_link: document.getElementById('channel-link').value,
-        content_link: document.getElementById('content-link').value
+        content_link: document.getElementById('content-link').value || '',
+        bulk_end_link: document.getElementById('bulk-end-link').value || null
       };
+      
       const btn = document.getElementById('submit-btn');
       btn.disabled = true; btn.textContent = 'Submitting...';
 

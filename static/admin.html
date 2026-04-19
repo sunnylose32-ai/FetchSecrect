@@ -230,8 +230,10 @@
               </div>
               
               <div style="background:var(--bg); padding:1rem; border-radius:8px">
+                <span style="font-size:0.7rem; padding:3px 8px; border-radius:4px; display:inline-block; background:var(--accent-dim); margin-bottom:10px; font-weight:bold">${o.request_type.toUpperCase()} REQUEST</span><br/>
                 <p style="font-size:0.85rem; color:var(--text-muted)">Invite: <a href="${o.channel_link}" target="_blank" style="color:var(--accent-light)">${o.channel_link}</a></p>
-                <p style="font-size:0.85rem; color:var(--text-muted)">Target: <a href="${o.content_link}" target="_blank" style="color:var(--accent-light)">${o.content_link}</a></p>
+                ${o.content_link ? `<p style="font-size:0.85rem; color:var(--text-muted)">Start: <a href="${o.content_link}" target="_blank" style="color:var(--accent-light)">${o.content_link}</a></p>` : ''}
+                ${o.bulk_end_link ? `<p style="font-size:0.85rem; color:var(--text-muted)">End: <a href="${o.bulk_end_link}" target="_blank" style="color:var(--accent-light)">${o.bulk_end_link}</a></p>` : ''}
               </div>
 
               <div class="order-status-actions">

@@ -35,7 +35,9 @@ app = FastAPI(title="TeleLink SaaS", docs_url=None, redoc_url=None)
 
 class RequestSubmit(BaseModel):
     channel_link: str
-    content_link: str
+    content_link: str = ""
+    request_type: str = "single"
+    bulk_end_link: str = None
 
 class CompleteRequest(BaseModel):
     request_id: int
@@ -108,12 +110,20 @@ async def submit_order(req: RequestSubmit, x_supabase_token: str = Header(None))
                 content={"ok": False, "detail": "LIMIT_REACHED", "msg": "Free trial used up."}
             )
 
+        if req.request_type != 'single' and not profile.get("is_premium", False):
+            return JSONResponse(
+                status_code=403, 
+                content={"ok": False, "detail": "PREMIUM_REQUIRED", "msg": "Buy credits to unlock Bulk requests."}
+            )
+
         # Insert request (Using ADMIN client to bypass RLS blocks)
         data = {
             "user_id": user.id,
             "user_email": user.email,
             "channel_link": req.channel_link.strip(),
             "content_link": req.content_link.strip(),
+            "request_type": req.request_type,
+            "bulk_end_link": req.bulk_end_link.strip() if req.bulk_end_link else None,
             "status": "Pending"
         }
         admin_supabase.table("requests").insert(data).execute()
@@ -327,7 +337,8 @@ async def admin_update_payment(req: PaymentUpdate, x_admin_secret: str = Header(
                 if prof_res.data:
                     current = prof_res.data[0].get("free_trials_left", 0)
                     admin_supabase.table("profiles").update({
-                        "free_trials_left": current + req.add_credits
+                        "free_trials_left": current + req.add_credits,
+                        "is_premium": True
                     }).eq("id", uid).execute()
 
         return {"ok": True, "message": "Transaction updated successfully."}
