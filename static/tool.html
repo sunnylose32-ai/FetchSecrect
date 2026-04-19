@@ -36,9 +36,6 @@
     .success-icon { font-size: 4rem; color: var(--success); text-align: center; margin-bottom: 1rem; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
     @keyframes popIn { 0% { transform: scale(0); } 100% { transform: scale(1); } }
     
-    .pulse-btn { animation: pulse 2s infinite; }
-    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(139, 92, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); } }
-
     @media (max-width: 800px) { .dashboard-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -64,7 +61,7 @@
             <div id="btn-usdt" class="pay-card" onclick="startCheckout('USDT / TRX', 'val-usdt')" style="display:none">
               <div class="pay-card-icon">💵</div><div class="pay-card-title">USDT (TRC20)</div>
             </div>
-            <div id="btn-webmoney" class="pay-card" onclick="startCheckout('Webmoney WMT', 'val-webmoney')" style="display:none">
+            <div id="btn-webmoney" class="pay-card" onclick="startCheckout('Webmoney', 'val-webmoney')" style="display:none">
               <div class="pay-card-icon">🏦</div><div class="pay-card-title">Webmoney</div>
             </div>
             <div id="btn-nagad" class="pay-card" onclick="startCheckout('Nagad', 'val-nagad')" style="display:none">
@@ -80,7 +77,7 @@
         <div class="gw-body text-center">
           <div class="spinner"></div>
           <h2 class="mb-1" style="font-size: 1.2rem;">Awaiting Payment</h2>
-          <p class="text-muted text-sm mb-2" style="max-width: 80%; margin: 0 auto;">Send the exact amount to the <strong id="gw-method-name"></strong> address below. The network may take a few minutes to confirm.</p>
+          <p class="text-muted text-sm mb-2" style="max-width: 80%; margin: 0 auto;">Send the exact amount to the <strong id="gw-method-name"></strong> address below.</p>
           
           <div class="copy-box">
             <input type="text" id="gw-pay-address" value="" readonly/>
@@ -94,17 +91,22 @@
         </div>
       </div>
 
-      <!-- Screen 3: Post-Payment Success -->
+      <!-- Screen 3: Verify Transaction -->
       <div id="gw-step-3" class="gw-step">
         <div class="gw-body text-center">
           <div class="success-icon">✅</div>
-          <h2 class="mb-1">Payment Logged</h2>
+          <h2 class="mb-1">Payment Sent</h2>
           <p class="text-dim text-sm mb-2" style="background: rgba(139,92,246,0.1); padding: 1rem; border-radius: 12px; border: 1px solid var(--accent-dark);">
-            Because this is a manual gateway mode, you must submit your <strong>Transaction ID</strong> or Screenshot to our Admin team to receive your credits.
+            Please submit your <strong>Transaction ID / Reference Name</strong> below so our system can verify and instantly add credits to your account.
           </p>
 
+          <div class="input-group text-left mt-2">
+            <label class="input-label">Transaction ID / Sender Details</label>
+            <input type="text" id="gw-trx-id" class="input" placeholder="e.g. TRX123456789" />
+          </div>
+
           <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 10px;">
-            <a href="#" target="_blank" id="gw-contact-btn" class="btn btn-primary pulse-btn w-full">✉️ Submit Transaction ID Now</a>
+            <button class="btn btn-primary w-full" onclick="submitTransaction()" id="gw-submit-tx-btn">Verify Transaction</button>
             <button class="btn btn-outline w-full" onclick="closeGateway()">Done</button>
           </div>
         </div>
@@ -153,19 +155,18 @@
         </div>
 
         <h3 class="mb-2">My Requests</h3>
+        <div class="table-wrap mb-2">
+          <table>
+            <thead><tr><th>Date</th><th>Links</th><th>Status</th><th>Result</th></tr></thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+
+        <h3 class="mb-2">My Deposits</h3>
         <div class="table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Links</th>
-                <th>Status</th>
-                <th>Result</th>
-              </tr>
-            </thead>
-            <tbody id="history-body">
-              <!-- Orders will be injected here -->
-            </tbody>
+            <thead><tr><th>Date</th><th>Method</th><th>Trx ID</th><th>Status</th></tr></thead>
+            <tbody id="payments-history-body"></tbody>
           </table>
         </div>
       </div>
@@ -201,13 +202,14 @@
   <script>
     const form = document.getElementById('request-form');
     const historyBody = document.getElementById('history-body');
+    const payHistoryBody = document.getElementById('payments-history-body');
+
+    let currentCheckoutMethod = '';
 
     /* ── Utilities ── */
     function copyVal(inputId) {
       const el = document.getElementById(inputId);
-      navigator.clipboard.writeText(el.value).then(() => {
-        showToast('Address Copied!', 'success');
-      });
+      navigator.clipboard.writeText(el.value).then(() => { showToast('Address Copied!', 'success'); });
     }
 
     /* ── Gateway Logic ── */
@@ -218,6 +220,7 @@
     
     function closeGateway() {
       document.getElementById('gateway-modal').style.display = 'none';
+      document.getElementById('gw-trx-id').value = '';
     }
 
     function setGwStep(step) {
@@ -229,19 +232,42 @@
       const address = document.getElementById(sourceInputId).value;
       if (!address) return showToast('Error: Admin has not configured this wallet.', 'error');
       
+      currentCheckoutMethod = methodName;
       document.getElementById('gw-method-name').textContent = methodName;
       document.getElementById('gw-pay-address').value = address;
+      setGwStep(2); 
+    }
+
+    function cancelCheckout() { setGwStep(1); }
+    function completeCheckout() { setGwStep(3); }
+
+    async function submitTransaction() {
+      const trxId = document.getElementById('gw-trx-id').value;
+      if (!trxId) return showToast('Please enter your Transaction ID.', 'error');
+
+      const btn = document.getElementById('gw-submit-tx-btn');
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+
+      try {
+        const session = await getSession();
+        const res = await fetch('/api/payments/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-supabase-token': session.access_token },
+          body: JSON.stringify({ method: currentCheckoutMethod, trx_id: trxId })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('Transaction submitted! Awaiting Admin approval.', 'success');
+          closeGateway();
+          loadDashboard(); // Refresh deposits table
+        } else { showToast(data.detail || 'Error submitting tx', 'error'); }
+      } catch (e) { showToast(e.message, 'error'); }
       
-      setGwStep(2); // Move to checkout screen
+      btn.disabled = false;
+      btn.textContent = 'Verify Transaction';
     }
 
-    function cancelCheckout() {
-      setGwStep(1); // Go back to method selection
-    }
-
-    function completeCheckout() {
-      setGwStep(3); // Move to success/contact screen
-    }
 
     /* ── Core Site Logic ── */
     async function loadPublicSettings() {
@@ -250,24 +276,17 @@
         const data = await res.json();
         if (data.ok && data.settings) {
           const st = data.settings;
-          
-          // Inject Contact Links
           const contactLink = st.contact_link || 'https://t.me/';
           document.getElementById('sidebar-contact-btn').href = contactLink;
-          document.getElementById('gw-contact-btn').href = contactLink;
 
-          // Inject Pricing into Gateway header
-          if (st.price_info) {
-            document.getElementById('gw-dynamic-price').textContent = st.price_info;
-          }
+          if (st.price_info) document.getElementById('gw-dynamic-price').textContent = st.price_info;
 
-          // Inject Wallets into hidden inputs and display specific buttons in the grid
           if (st.pay_binance) { document.getElementById('btn-binance').style.display = 'block'; document.getElementById('val-binance').value = st.pay_binance; }
           if (st.pay_webmoney) { document.getElementById('btn-webmoney').style.display = 'block'; document.getElementById('val-webmoney').value = st.pay_webmoney; }
           if (st.pay_usdt) { document.getElementById('btn-usdt').style.display = 'block'; document.getElementById('val-usdt').value = st.pay_usdt; }
           if (st.pay_nagad) { document.getElementById('btn-nagad').style.display = 'block'; document.getElementById('val-nagad').value = st.pay_nagad; }
         }
-      } catch (e) { console.error("Failed to load settings:", e); }
+      } catch (e) {}
     }
 
     async function loadDashboard() {
@@ -277,35 +296,38 @@
 
       // Load Profile
       try {
-        const res = await fetch('/api/profile/me', {
-          headers: { 'x-supabase-token': session.access_token }
-        });
+        const res = await fetch('/api/profile/me', { headers: { 'x-supabase-token': session.access_token } });
+        const data = await res.json();
+        if (data.ok) document.getElementById('trials-count').textContent = data.profile.free_trials_left;
+      } catch (e) {}
+
+      // Load Requests History
+      try {
+        const res = await fetch('/api/orders/history', { headers: { 'x-supabase-token': session.access_token } });
         const data = await res.json();
         if (data.ok) {
-          document.getElementById('trials-count').textContent = data.profile.free_trials_left;
+          historyBody.innerHTML = data.orders.map(o => `<tr>
+            <td>${fmtDate(o.created_at)}</td>
+            <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis">
+              <small>${o.channel_link}</small><br/><small class="text-dim">${o.content_link}</small>
+            </td>
+            <td>${getStatusBadge(o.status)}</td>
+            <td>${o.result_content ? `<a href="${o.result_content}" target="_blank" class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem">View Delivery</a>` : '<span class="text-dim">Pending...</span>'}</td>
+          </tr>`).join('') || '<tr><td colspan="4" class="text-center">No requests yet.</td></tr>';
         }
       } catch (e) {}
 
-      // Load History
+      // Load Deposits History
       try {
-        const res = await fetch('/api/orders/history', {
-          headers: { 'x-supabase-token': session.access_token }
-        });
+        const res = await fetch('/api/payments/history', { headers: { 'x-supabase-token': session.access_token } });
         const data = await res.json();
         if (data.ok) {
-          historyBody.innerHTML = data.orders.map(o => `
-            <tr>
-              <td>${fmtDate(o.created_at)}</td>
-              <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis">
-                <small>${o.channel_link}</small><br/>
-                <small class="text-dim">${o.content_link}</small>
-              </td>
-              <td>${getStatusBadge(o.status)}</td>
-              <td>
-                ${o.result_content ? `<a href="${o.result_content}" target="_blank" class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem">View Delivery</a>` : '<span class="text-dim">Pending...</span>'}
-              </td>
-            </tr>
-          `).join('') || '<tr><td colspan="4" class="text-center">No requests yet.</td></tr>';
+          payHistoryBody.innerHTML = data.payments.map(p => `<tr>
+            <td>${fmtDate(p.created_at)}</td>
+            <td><strong style="color:var(--text)">${p.method}</strong></td>
+            <td style="font-family:monospace" class="text-dim">${p.trx_id}</td>
+            <td>${getStatusBadge(p.status)}</td>
+          </tr>`).join('') || '<tr><td colspan="4" class="text-center">No deposits yet.</td></tr>';
         }
       } catch (e) {}
     }
@@ -317,36 +339,21 @@
         channel_link: document.getElementById('channel-link').value,
         content_link: document.getElementById('content-link').value
       };
-
       const btn = document.getElementById('submit-btn');
-      btn.disabled = true;
-      btn.textContent = 'Submitting...';
+      btn.disabled = true; btn.textContent = 'Submitting...';
 
       try {
         const res = await fetch('/api/orders/submit', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-supabase-token': session.access_token 
-          },
+          headers: { 'Content-Type': 'application/json', 'x-supabase-token': session.access_token },
           body: JSON.stringify(payload)
         });
         const data = await res.json();
-        if (res.status === 402) {
-          openGateway();
-        } else if (data.ok) {
-          showToast(data.message, 'success');
-          form.reset();
-          loadDashboard();
-        } else {
-          showToast(data.detail || 'Error submitting request', 'error');
-        }
-      } catch (err) {
-        showToast(err.message, 'error');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = '🚀 Submit Request';
-      }
+        if (res.status === 402) { openGateway(); } 
+        else if (data.ok) { showToast(data.message, 'success'); form.reset(); loadDashboard(); } 
+        else { showToast(data.detail || 'Error', 'error'); }
+      } catch (err) { showToast(err.message, 'error'); } 
+      finally { btn.disabled = false; btn.textContent = '🚀 Submit Request'; }
     });
 
     loadPublicSettings();

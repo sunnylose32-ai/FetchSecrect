@@ -57,6 +57,7 @@
     <!-- TABS -->
     <div class="admin-tabs">
       <button class="tab-btn active" onclick="switchTab('requests')">Global Requests</button>
+      <button class="tab-btn" onclick="switchTab('deposits')">Manage Deposits</button>
       <button class="tab-btn" onclick="switchTab('users')">Manage Users</button>
       <button class="tab-btn" onclick="switchTab('settings')">Site Settings</button>
     </div>
@@ -68,6 +69,29 @@
         <button onclick="loadAdminDashboard()" class="btn btn-outline">🔄 Refresh</button>
       </div>
       <div id="admin-queue" class="admin-grid"><div class="text-center">Loading requests...</div></div>
+    </div>
+
+    <!-- TAB: DEPOSITS -->
+    <div id="tab-deposits" class="admin-tab-content">
+      <div style="display:flex; justify-content:space-between; align-items:center" class="mb-2">
+        <h2>User Deposits</h2>
+        <button onclick="loadDeposits()" class="btn btn-outline">🔄 Refresh</button>
+      </div>
+      <p class="text-muted mb-2 text-sm">Approve payments submitted by users and instantly credit their accounts.</p>
+      <div class="admin-card" style="overflow-x:auto;">
+        <table class="users-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>User</th>
+              <th>Method & TxID</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="deposits-body"><tr><td colspan="5">Loading...</td></tr></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- TAB: USERS -->
@@ -103,7 +127,7 @@
             <input type="number" id="cfg_trials" class="input" required/>
           </div>
           <div class="input-group">
-            <label class="input-label">Pricing Info / Payment Instructions</label>
+            <label class="input-label">Pricing Header (Shows in Checkout)</label>
             <input type="text" id="cfg_price" class="input" placeholder="e.g. 1 Request = $5"/>
           </div>
           <div class="input-group">
@@ -156,6 +180,7 @@
       document.getElementById('tab-' + tabId).classList.add('active');
 
       if (tabId === 'requests') loadAdminDashboard();
+      if (tabId === 'deposits') loadDeposits();
       if (tabId === 'users') loadUsers();
       if (tabId === 'settings') loadSettings();
     }
@@ -178,12 +203,8 @@
           authOverlay.style.display = 'none';
           showToast('Dashboard Unlocked', 'success');
           switchTab('requests');
-        } else {
-          showToast('Invalid password', 'error');
-        }
-      } catch (e) {
-        showToast('Login failed', 'error');
-      }
+        } else { showToast('Invalid password', 'error'); }
+      } catch (e) { showToast('Login failed', 'error'); }
     }
 
     /* ── Requests Tab ── */
@@ -216,29 +237,25 @@
 
               <div id="form-${o.id}" class="completion-form" style="display:none; background:var(--bg2); padding:1rem; border-radius:8px; border:1px solid var(--border);">
                 <p class="mb-1 text-dim" style="font-size:0.9rem">Deliver via File Upload OR Link Data:</p>
-                
                 <div class="input-group">
                   <label class="input-label">1. Upload Image/Video (Optional)</label>
                   <input type="file" id="file-${o.id}" class="input" style="padding:0.5rem" accept="image/*,video/*" />
                   <button class="btn btn-outline mt-1 w-full" onclick="uploadDeliveryFile(${o.id})">⬆️ Upload File Directly to Delivery</button>
                 </div>
-
                 <div class="input-group mt-2">
                   <label class="input-label">2. Final Delivery Link</label>
                   <input type="text" id="res-${o.id}" class="input" placeholder="Wait for upload, or paste link..." value="${o.result_content || ''}"/>
                 </div>
-
                 <div style="display:flex; gap:10px">
                   <button class="btn btn-primary w-full" onclick="submitCompletion(${o.id})">🎉 Mark Completed & Send</button>
                   <button class="btn btn-ghost" onclick="hideCompletionForm(${o.id})">Cancel</button>
                 </div>
               </div>
-
               <small class="text-dim">Submitted: ${fmtDate(o.created_at)}</small>
             </div>
           `).join('') || '<div class="admin-card text-center">No orders found.</div>';
         }
-      } catch (err) { showToast(err.message, 'error'); }
+      } catch (err) {}
     }
 
     function showCompletionForm(id) { document.getElementById(`form-${id}`).style.display = 'block'; }
@@ -257,23 +274,16 @@
       const fileInput = document.getElementById(`file-${id}`);
       if (!fileInput.files.length) return showToast('Please select a file first.', 'error');
       
-      const file = fileInput.files[0];
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', fileInput.files[0]);
       
       showToast('Uploading file... please wait', 'success');
-      const res = await fetch('/api/admin/upload', {
-        method: 'POST',
-        headers: { 'x-admin-secret': currentAdminSecret },
-        body: formData
-      });
+      const res = await fetch('/api/admin/upload', { method: 'POST', headers: { 'x-admin-secret': currentAdminSecret }, body: formData });
       const data = await res.json();
       if (data.ok) {
         document.getElementById(`res-${id}`).value = data.url;
         showToast('File uploaded! Now click Mark Completed.', 'success');
-      } else {
-        showToast('Upload failed: ' + (data.detail || ''), 'error');
-      }
+      } else { showToast('Upload failed', 'error'); }
     }
 
     async function submitCompletion(id) {
@@ -287,6 +297,58 @@
       if ((await res.json()).ok) { showToast('Order completed!', 'success'); loadAdminDashboard(); }
     }
 
+
+    /* ── Deposits Tab ── */
+    async function loadDeposits() {
+      if (!currentAdminSecret) return;
+      try {
+        const res = await fetch('/api/admin/payments', { headers: { 'x-admin-secret': currentAdminSecret } });
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById('deposits-body').innerHTML = data.payments.map(p => `
+            <tr>
+              <td class="text-dim text-sm">${fmtDate(p.created_at)}</td>
+              <td style="font-weight:600">${p.user_email}</td>
+              <td><span style="color:var(--text)">${p.method}</span><br/><small style="font-family:monospace; color:var(--accent-light)">TxID: ${p.trx_id}</small></td>
+              <td>${getStatusBadge(p.status)}</td>
+              <td>
+                ${p.status === 'Pending' ? `
+                  <button class="btn btn-primary mb-1" style="padding:4px 8px; font-size:0.8rem; width:100%" onclick="approveDeposit(${p.id})">Approve & Credit</button>
+                  <button class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem; width:100%; border-color:var(--error); color:var(--error)" onclick="rejectDeposit(${p.id})">Reject</button>
+                ` : `<span class="text-dim">Archived</span>`}
+              </td>
+            </tr>
+          `).join('') || '<tr><td colspan="5" class="text-center">No deposits found.</td></tr>';
+        }
+      } catch (err) {}
+    }
+
+    async function approveDeposit(paymentId) {
+      const credits = prompt("Verified! How many credits should be added to this user's account? (Enter a number)", "10");
+      if (credits === null || isNaN(parseInt(credits))) return;
+
+      try {
+        const res = await fetch('/api/admin/payments/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-secret': currentAdminSecret },
+          body: JSON.stringify({ payment_id: paymentId, status: 'Completed', add_credits: parseInt(credits) })
+        });
+        if ((await res.json()).ok) { showToast(`Added ${credits} credits!`, 'success'); loadDeposits(); }
+      } catch (e) { showToast('Error updating deposit', 'error'); }
+    }
+
+    async function rejectDeposit(paymentId) {
+      if (!confirm("Are you sure you want to reject this payment? Fake/invalid TxID?")) return;
+      try {
+        const res = await fetch('/api/admin/payments/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-secret': currentAdminSecret },
+          body: JSON.stringify({ payment_id: paymentId, status: 'Rejected', add_credits: 0 })
+        });
+        if ((await res.json()).ok) { showToast('Deposit rejected', 'success'); loadDeposits(); }
+      } catch (e) { showToast('Error', 'error'); }
+    }
+
     /* ── Users Tab ── */
     async function loadUsers() {
       if (!currentAdminSecret) return;
@@ -298,12 +360,8 @@
             <tr>
               <td style="font-weight:600">${u.user_email || u.email || 'N/A'}</td>
               <td class="text-dim text-sm">${new Date(u.created_at).toLocaleDateString()}</td>
-              <td>
-                <input type="number" id="trial-${u.id}" class="input" style="width:80px; padding:4px 8px" value="${u.free_trials_left || 0}" />
-              </td>
-              <td>
-                <button class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem" onclick="saveUserTrials('${u.id}')">Save Credits</button>
-              </td>
+              <td><input type="number" id="trial-${u.id}" class="input" style="width:80px; padding:4px 8px" value="${u.free_trials_left || 0}" /></td>
+              <td><button class="btn btn-outline" style="padding:4px 8px; font-size:0.8rem" onclick="saveUserTrials('${u.id}')">Save Credits</button></td>
             </tr>
           `).join('') || '<tr><td colspan="4" class="text-center">No users found.</td></tr>';
         }

@@ -55,6 +55,15 @@ class UserUpdate(BaseModel):
     user_id: str
     free_trials_left: int
 
+class PaymentSubmit(BaseModel):
+    method: str
+    trx_id: str
+
+class PaymentUpdate(BaseModel):
+    payment_id: int
+    status: str
+    add_credits: int
+
 # ── Auth Middleware Helper ──────────────────────────────────────────────────────
 
 async def get_user_from_token(token: str):
@@ -160,6 +169,31 @@ async def get_public_settings():
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
+@app.post("/api/payments/submit")
+async def submit_payment(req: PaymentSubmit, x_supabase_token: str = Header(None)):
+    user = await get_user_from_token(x_supabase_token)
+    try:
+        data = {
+            "user_id": user.id,
+            "user_email": user.email,
+            "method": req.method,
+            "trx_id": req.trx_id.strip(),
+            "status": "Pending"
+        }
+        admin_supabase.table("transactions").insert(data).execute()
+        return {"ok": True, "message": "Transaction submitted for verification."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
+@app.get("/api/payments/history")
+async def get_payment_history(x_supabase_token: str = Header(None)):
+    try:
+        user = await get_user_from_token(x_supabase_token)
+        res = admin_supabase.table("transactions").select("*").eq("user_id", user.id).order("created_at", desc=True).execute()
+        return {"ok": True, "payments": res.data}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
 # ── Admin Routes ────────────────────────────────────────────────────────────────
 
 @app.post("/api/admin/login")
@@ -256,6 +290,43 @@ async def admin_upload_file(file: UploadFile = File(...), x_admin_secret: str = 
         # Get the public URL
         public_url = admin_supabase.storage.from_("deliveries").get_public_url(file_name)
         return {"ok": True, "url": public_url}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
+@app.get("/api/admin/payments")
+async def admin_get_payments(x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized.")
+    try:
+        res = admin_supabase.table("transactions").select("*").order("created_at", desc=True).execute()
+        return {"ok": True, "payments": res.data}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
+
+@app.post("/api/admin/payments/update")
+async def admin_update_payment(req: PaymentUpdate, x_admin_secret: str = Header(None)):
+    if not Config.ADMIN_PASSWORD or x_admin_secret != Config.ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Unauthorized.")
+    try:
+        # Update transaction status
+        admin_supabase.table("transactions").update({
+            "status": req.status
+        }).eq("id", req.payment_id).execute()
+        
+        # If approved and credits added, give credits to user
+        if req.status == "Completed" and req.add_credits > 0:
+            tx_res = admin_supabase.table("transactions").select("user_id").eq("id", req.payment_id).execute()
+            if tx_res.data:
+                uid = tx_res.data[0]["user_id"]
+                # get current
+                prof_res = admin_supabase.table("profiles").select("free_trials_left").eq("id", uid).execute()
+                if prof_res.data:
+                    current = prof_res.data[0].get("free_trials_left", 0)
+                    admin_supabase.table("profiles").update({
+                        "free_trials_left": current + req.add_credits
+                    }).eq("id", uid).execute()
+
+        return {"ok": True, "message": "Transaction updated successfully."}
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "detail": str(e)})
 
