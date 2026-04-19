@@ -47,38 +47,72 @@ active_jobs = {}
 
 # --------------- Helpers ---------------
 
-async def send_media(chat_id, msg):
-    """Try to copy a message; fall back to download+reupload if restricted."""
+async def resolve_chat(client, chat_id):
+    """Try to resolve a chat peer using ID or username."""
     try:
-        if not msg.has_protected_content and not (msg.chat and msg.chat.has_protected_content):
-            await msg.copy(chat_id)
-            return True
-    except Exception:
-        pass
+        if isinstance(chat_id, int):
+            # Try to see if it's already in cache
+            return await client.get_chat(chat_id)
+        else:
+            # Username or link context
+            return await client.get_chat(chat_id)
+    except Exception as e:
+        logger.debug(f"Initial resolution failed for {chat_id}: {e}")
+        
+    # If ID failed, it might be because the account hasn't 'seen' it.
+    # We can't do much for private numeric IDs except suggest joining.
+    return None
 
-    # Download-reupload fallback
-    if msg.media:
-        downloader = user if (user and user_is_active) else bot
+async def send_media(chat_id, msg):
+    """Deliver message content using the main bot, falling back to download if needed."""
+    try:
+        # 1. Try direct copy with the bot first (works for public channels or if bot is in it)
+        try:
+            await bot.copy_message(chat_id, msg.chat.id, msg.id)
+            return True
+        except Exception:
+            pass
+
+        # 2. Try direct copy with the msg's owner client (usually the Userbot)
+        # Note: This often fails for users the Userbot hasn't chatted with.
+        try:
+            if not msg.has_protected_content:
+                await msg.copy(chat_id)
+                return True
+        except Exception:
+            pass
+    except Exception as e:
+        logger.debug(f"Direct copy failed: {e}")
+
+    # 3. Download-reupload fallback (The most reliable for restricted/private content)
+    if msg.media or msg.text:
+        # Use whichever client fetched the message to download it
+        downloader = msg._client if hasattr(msg, "_client") else bot
         file_path = None
         try:
-            file_path = await downloader.download_media(msg)
-            if file_path:
+            if msg.media:
+                file_path = await downloader.download_media(msg)
+                if not file_path:
+                    return False
+                
                 caption = msg.caption or ""
                 if msg.photo:      await bot.send_photo(chat_id, file_path, caption=caption)
                 elif msg.video:    await bot.send_video(chat_id, file_path, caption=caption)
                 elif msg.audio:    await bot.send_audio(chat_id, file_path, caption=caption)
                 elif msg.voice:    await bot.send_voice(chat_id, file_path, caption=caption)
                 elif msg.sticker:  await bot.send_sticker(chat_id, file_path)
+                elif msg.animation: await bot.send_animation(chat_id, file_path, caption=caption)
                 else:              await bot.send_document(chat_id, file_path, caption=caption)
                 return True
+            elif msg.text:
+                await bot.send_message(chat_id, msg.text)
+                return True
         except Exception as e:
-            logger.error(f"send_media error: {e}")
+            logger.error(f"Fallback send_media error: {e}")
         finally:
             if file_path and os.path.exists(file_path):
-                os.remove(file_path)
-    elif msg.text:
-        await bot.send_message(chat_id, msg.text)
-        return True
+                try: os.remove(file_path)
+                except: pass
     return False
 
 
@@ -149,8 +183,13 @@ async def handle_message(client, message):
 
         try:
             # Force peer resolution
-            try: await user.get_chat(channel_id)
-            except Exception: pass
+            chat_obj = await resolve_chat(user, channel_id)
+            if not chat_obj:
+                await message.reply_text(
+                    "❌ **Peer ID Invalid**\n\n"
+                    "I cannot find this channel. Please send the **Invite Link** first."
+                )
+                return
 
             async for msg in user.get_chat_history(channel_id):
                 if not active_jobs.get(uid):
@@ -225,8 +264,13 @@ async def handle_message(client, message):
 
         try:
             # Force peer resolution
-            try: await user.get_chat(source_chat_id)
-            except Exception: pass
+            chat_obj = await resolve_chat(user, source_chat_id)
+            if not chat_obj:
+                await message.reply_text(
+                    "❌ **Peer ID Invalid**\n\n"
+                    "I cannot find this channel. Please send the **Invite Link** first to resolve it."
+                )
+                return
 
             for m_id in range(start_id, end_id + 1):
                 if not active_jobs.get(uid):
@@ -287,8 +331,8 @@ async def handle_message(client, message):
         target_msg = None
         if user and user_is_active:
             try:
-                try: await user.get_chat(formatted_chat_id)
-                except Exception: pass
+                # Try to resolve peer before fetching
+                await resolve_chat(user, formatted_chat_id)
                 target_msg = await user.get_messages(formatted_chat_id, msg_id)
                 if not target_msg or target_msg.empty:
                     logger.warning(f"Userbot got empty message for {formatted_chat_id}/{msg_id}")
@@ -297,6 +341,7 @@ async def handle_message(client, message):
 
         if not target_msg or target_msg.empty:
             try:
+                await resolve_chat(bot, formatted_chat_id)
                 target_msg = await bot.get_messages(formatted_chat_id, msg_id)
             except Exception as e:
                 logger.error(f"Bot failed get_messages: {e}")
