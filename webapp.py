@@ -62,13 +62,14 @@ async def submit_order(req: RequestSubmit, x_supabase_token: str = Header(None))
         profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
         
         if not profile_res.data:
-            # SELF-HEALING: Use ADMIN client to bypass RLS
-            print(f"🔄 Creating missing profile for {user.email} (Bypassing RLS)")
-            insert_res = admin_supabase.table("profiles").insert({
+            # SELF-HEALING: Use UPSERT (Update if exists, otherwise create)
+            print(f"🔄 Syncing missing profile for {user.email}")
+            insert_res = admin_supabase.table("profiles").upsert({
                 "id": user.id,
+                "email": user.email,
                 "user_email": user.email,
                 "free_trials_left": 1
-            }).execute()
+            }, on_conflict="id").execute()
             profile = insert_res.data[0]
         else:
             profile = profile_res.data[0]
@@ -116,12 +117,13 @@ async def get_profile(x_supabase_token: str = Header(None)):
         profile_res = supabase.table("profiles").select("*").eq("id", user.id).execute()
         
         if not profile_res.data:
-            # SELF-HEALING: Use ADMIN client to bypass RLS
-            insert_res = admin_supabase.table("profiles").insert({
+            # SELF-HEALING: Use UPSERT
+            insert_res = admin_supabase.table("profiles").upsert({
                 "id": user.id,
+                "email": user.email,
                 "user_email": user.email,
                 "free_trials_left": 1
-            }).execute()
+            }, on_conflict="id").execute()
             profile = insert_res.data[0]
         else:
             profile = profile_res.data[0]
