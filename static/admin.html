@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Dashboard — TeleLink</title>
+  <link rel="stylesheet" href="static/style.css"/>
+  <style>
+    .admin-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-top: 2rem; }
+    .order-row { display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+    .order-status-actions { display: flex; gap: 10px; margin-top: 10px; }
+    .completion-form { display: none; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <div class="bg-orbs"></div>
+  <div id="toast-container"></div>
+
+  <nav class="navbar">
+    <a class="nav-logo" href="index.html">
+      <div class="logo-icon">🔗</div> TeleLink Admin
+    </a>
+    <div style="display:flex; align-items:center; gap:20px">
+      <span id="admin-email" class="text-muted" style="font-size:0.9rem"></span>
+      <a href="tool.html" class="btn btn-ghost">View As User</a>
+    </div>
+  </nav>
+
+  <div class="container mt-2">
+    <div style="display:flex; justify-content:space-between; align-items:center" class="mb-2">
+      <h2>Global Request Queue</h2>
+      <button onclick="loadAdminDashboard()" class="btn btn-outline">🔄 Refresh</button>
+    </div>
+
+    <div id="admin-queue" class="admin-grid">
+      <!-- Admin orders will appear here -->
+      <div class="text-center">Loading requests...</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="static/app.js"></script>
+  <script>
+    const queueEl = document.getElementById('admin-queue');
+
+    async function loadAdminDashboard() {
+      const session = await getSession();
+      if (!session) { window.location.href = 'login.html'; return; }
+      document.getElementById('admin-email').textContent = session.user.email;
+
+      try {
+        const res = await fetch('/api/admin/requests', {
+          headers: { 'x-supabase-token': session.access_token }
+        });
+        const data = await res.json();
+        
+        if (res.status === 403) {
+          queueEl.innerHTML = `
+            <div class="admin-card text-center">
+              <h3 style="color:var(--error)">Access Denied</h3>
+              <p class="text-muted">You are not an administrator. Please contact the system owner to enable admin access for your account.</p>
+              <br/>
+              <a href="tool.html" class="btn btn-primary">Back to My Tool</a>
+            </div>`;
+          return;
+        }
+
+        if (data.ok) {
+          queueEl.innerHTML = data.orders.map(o => `
+            <div class="order-row">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start">
+                <div>
+                  <span class="admin-order-id">#${o.id}</span>
+                  <p style="font-weight:700; color:var(--text); margin:5px 0">${o.user_email}</p>
+                </div>
+                ${getStatusBadge(o.status)}
+              </div>
+              
+              <div style="background:var(--bg); padding:1rem; border-radius:8px">
+                <p style="font-size:0.85rem; color:var(--text-muted)">Invite: <a href="${o.channel_link}" target="_blank" style="color:var(--accent-light)">${o.channel_link}</a></p>
+                <p style="font-size:0.85rem; color:var(--text-muted)">Target: <a href="${o.content_link}" target="_blank" style="color:var(--accent-light)">${o.content_link}</a></p>
+              </div>
+
+              <div class="order-status-actions">
+                <button class="btn btn-primary" onclick="showCompletionForm(${o.id})">✅ Complete Order</button>
+                <button class="btn btn-outline" onclick="updateStatus(${o.id}, 'Processing')">🔄 Mark Processing</button>
+              </div>
+
+              <!-- Completion Form -->
+              <div id="form-${o.id}" class="completion-form">
+                <div class="input-group">
+                  <label class="input-label">Result content (Link or Zip link)</label>
+                  <input type="text" id="res-${o.id}" class="input" placeholder="Paste the result URL here..." value="${o.result_content || ''}"/>
+                </div>
+                <div style="display:flex; gap:10px">
+                  <button class="btn btn-primary" onclick="submitCompletion(${o.id})">Save & Notify User</button>
+                  <button class="btn btn-ghost" onclick="hideCompletionForm(${o.id})">Cancel</button>
+                </div>
+              </div>
+
+              <small class="text-dim">Submitted: ${fmtDate(o.created_at)}</small>
+            </div>
+          `).join('') || '<div class="admin-card text-center">No pending orders yet.</div>';
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function showCompletionForm(id) { document.getElementById(`form-${id}`).style.display = 'block'; }
+    function hideCompletionForm(id) { document.getElementById(`form-${id}`).style.display = 'none'; }
+
+    async function updateStatus(id, newStatus) {
+      const session = await getSession();
+      try {
+        const res = await fetch('/api/admin/complete', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-supabase-token': session.access_token 
+          },
+          body: JSON.stringify({ request_id: id, status: newStatus, result_content: '' })
+        });
+        const data = await res.json();
+        if (data.ok) { showToast('Status updated', 'success'); loadAdminDashboard(); }
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function submitCompletion(id) {
+      const result = document.getElementById(`res-${id}`).value;
+      if (!result) { showToast('Please enter a result link', 'error'); return; }
+
+      const session = await getSession();
+      try {
+        const res = await fetch('/api/admin/complete', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-supabase-token': session.access_token 
+          },
+          body: JSON.stringify({ request_id: id, status: 'Completed', result_content: result })
+        });
+        const data = await res.json();
+        if (data.ok) { showToast('Order completed!', 'success'); loadAdminDashboard(); }
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    loadAdminDashboard();
+  </script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Log In — TeleLink</title>
+  <title>Sign Up — TeleLink</title>
   <link rel="stylesheet" href="static/style.css"/>
   <style>
     .auth-box { max-width: 400px; margin: 4rem auto; padding: 2.5rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); backdrop-filter: blur(20px); }
@@ -21,24 +21,24 @@
 
   <div class="container">
     <div class="auth-box">
-      <h2 class="mb-2" style="font-size: 1.5rem; font-weight: 800; text-align: center;">Welcome Back</h2>
-      <p class="text-muted text-center mb-2">Access your content unlocking dashboard.</p>
+      <h2 class="mb-2" style="font-size: 1.5rem; font-weight: 800; text-align: center;">Join TeleLink</h2>
+      <p class="text-muted text-center mb-2">Create an account to start submitting requests.</p>
       
-      <form id="login-form">
+      <form id="signup-form">
         <div class="input-group">
           <label class="input-label">Email Address</label>
           <input type="email" id="email" class="input" placeholder="name@example.com" required/>
         </div>
         <div class="input-group">
           <label class="input-label">Password</label>
-          <input type="password" id="password" class="input" placeholder="••••••••" required/>
+          <input type="password" id="password" class="input" placeholder="••••••••" required minlength="6"/>
         </div>
-        <button type="submit" class="btn btn-primary w-full mt-2" id="login-btn">Sign In →</button>
+        <button type="submit" class="btn btn-primary w-full mt-2" id="signup-btn">Create Account →</button>
       </form>
       
       <div style="margin-top:1.5rem; text-align:center; font-size: 0.9rem">
-        <span class="text-dim">Don't have an account?</span>
-        <a href="signup.html" style="color:var(--accent-light); font-weight:700">Create Account</a>
+        <span class="text-dim">Already have an account?</span>
+        <a href="login.html" style="color:var(--accent-light); font-weight:700">Log In</a>
       </div>
     </div>
   </div>
@@ -46,8 +46,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="static/app.js"></script>
   <script>
-    const form = document.getElementById('login-form');
-    const btn = document.getElementById('login-btn');
+    const form = document.getElementById('signup-form');
+    const btn = document.getElementById('signup-btn');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -55,24 +55,18 @@
       const pw = document.getElementById('password').value;
       
       btn.disabled = true;
-      btn.textContent = 'Authenticating...';
+      btn.textContent = 'Please wait...';
       
       try {
-        await logIn(email, pw);
-        showToast('Login successful! Redirecting...', 'success');
-        setTimeout(() => { window.location.href = 'tool.html'; }, 1000);
+        await signUp(email, pw);
+        showToast('Check your email for the verification link!', 'success');
+        setTimeout(() => { window.location.href = 'login.html'; }, 3000);
       } catch (err) {
         showToast(err.message, 'error');
         btn.disabled = false;
-        btn.textContent = 'Sign In →';
+        btn.textContent = 'Create Account →';
       }
     });
-
-    // Check if already logged in
-    (async () => {
-      const session = await getSession();
-      if (session) window.location.href = 'tool.html';
-    })();
   </script>
 </body>
 </html>
